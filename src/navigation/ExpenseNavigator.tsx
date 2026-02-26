@@ -18,11 +18,11 @@ const Stack = createNativeStackNavigator<ExpensesStackParamList>();
 const ExpenseNavigator: React.FC = () => (
   <Stack.Navigator
     screenOptions={{
-      headerTintColor: Colors.primary,
+      headerTintColor: '#4A7FCB',
       headerBackVisible: true,
       headerShadowVisible: false,
-      headerStyle: { backgroundColor: Colors.white },
-      headerTitleStyle: { fontWeight: '600', color: Colors.textPrimary },
+      headerStyle: { backgroundColor: '#EEF8F5' },
+      headerTitleStyle: { fontWeight: '600', color: '#1A2B4A' },
       presentation: 'modal',
     }}
   >

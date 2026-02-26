@@ -6,6 +6,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { MainTabParamList } from '../types/navigation';
 import DashboardScreen from '../screens/dashboard/DashboardScreen';
@@ -31,6 +32,8 @@ const TabBadge: React.FC<{ count: number }> = ({ count }) => {
 const MainNavigator: React.FC = () => {
   const { data: pendingSettlements } = usePendingSettlements();
   const pendingCount = pendingSettlements?.length ?? 0;
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  const tabBarHeight = 60 + bottomInset;
 
   return (
     <Tab.Navigator
@@ -44,11 +47,12 @@ const MainNavigator: React.FC = () => {
           marginBottom: 2,
         },
         tabBarStyle: {
-          backgroundColor: Colors.white,
-          borderTopColor: Colors.border,
+          backgroundColor: '#D0EDE7',
+          borderTopColor: '#A8D5CB',
           borderTopWidth: 1,
           paddingTop: 6,
-          height: 60,
+          paddingBottom: bottomInset,
+          height: tabBarHeight,
         },
         tabBarIcon: ({ color, size }) => {
           const icons: Record<keyof MainTabParamList, string> = {

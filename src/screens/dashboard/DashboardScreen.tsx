@@ -2,7 +2,7 @@
  * Dashboard Screen â€” overview of balances, recent expenses, quick actions
  */
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDashboardSummary, useBalances } from '../../hooks/useBalances';
 import { useCurrentUser } from '../../hooks/useAuth';
@@ -25,11 +26,10 @@ import { formatCurrency } from '../../utils/currency';
 import { formatSmartDate } from '../../utils/date';
 import { CATEGORY_ICONS, CATEGORY_COLORS } from '../../constants';
 import Avatar from '../../components/ui/Avatar';
-import Badge from '../../components/ui/Badge';
-import Card from '../../components/ui/Card';
 import Skeleton, { SkeletonCard } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 import Screen from '../../components/ui/Screen';
+import NotificationPanel, { NotificationItem } from '../../components/ui/NotificationPanel';
 
 type DashboardNav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Dashboard'>,
@@ -48,14 +48,19 @@ const DashboardScreen: React.FC = () => {
   const { data: balanceSummary } = useBalances();
   const { data: pending } = usePendingSettlements();
 
-  const pendingCount = pending?.length ?? 0;
+  const [notifVisible, setNotifVisible] = useState(false);
 
-  const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
+  const notifications = useMemo<NotificationItem[]>(() => {
+    const items: NotificationItem[] = [];
+    if (pending && user) {
+      for (const s of pending) {
+        items.push({ kind: 'pending_settlement', settlement: s, currentUserId: user.id });
+      }
+    }
+    return items;
+  }, [pending, user]);
+
+  const notifCount = notifications.length;
 
   const openAddExpense = () => {
     navigation.navigate('ExpenseFlow', { screen: 'AddExpense', params: {} });
@@ -81,69 +86,71 @@ const DashboardScreen: React.FC = () => {
   const balances = balanceSummary?.balances ?? [];
 
   return (
-    <Screen
-      scrollable
-      refreshing={isRefetching}
-      onRefresh={refetch}
-      contentStyle={styles.content}
-    >
-      {/* Greeting */}
-      <View style={styles.greetingRow}>
-        <View style={styles.flex}>
-          <Text style={styles.greeting}>{greeting()},</Text>
-          <Text style={styles.userName}>{user?.name?.split(' ')[0] ?? 'there'} ðŸ‘‹</Text>
-        </View>
-        <TouchableOpacity onPress={() => navigation.navigate('Main', { screen: 'Profile' } as any)}>
-          <Avatar
-            name={user?.name ?? 'Me'}
-            uri={user?.avatarUrl}
-            size="md"
+    <View style={styles.wrapper}>
+      <Screen
+        scrollable
+        refreshing={isRefetching}
+        onRefresh={refetch}
+        contentStyle={styles.content}
+      >
+      {/* Header: Logo + Notifications Bell */}
+      <View style={styles.headerRow}>
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../../../assets/LogoWhoOwes.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
           />
+          <Text style={styles.logoText}>
+            <Text style={styles.logoTextWho}>Who</Text>
+            <Text style={styles.logoTextOwes}>Owes</Text>
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.bellButton}
+          onPress={() => setNotifVisible(true)}
+          activeOpacity={0.75}
+        >
+          <MaterialIcons
+            name={notifCount > 0 ? 'notifications-active' : 'notifications-none'}
+            size={28}
+            color={notifCount > 0 ? Colors.primary : Colors.textSecondary}
+          />
+          {notifCount > 0 && (
+            <View style={styles.bellBadge}>
+              <Text style={styles.bellBadgeText}>
+                {notifCount > 9 ? '9+' : notifCount}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
-      {/* Balance Cards */}
-      <View style={styles.balanceRow}>
-        <View style={[styles.balanceCard, { backgroundColor: Colors.success }]}>
-          <MaterialIcons name="arrow-downward" size={20} color={Colors.white} />
-          <Text style={styles.balanceLabel}>You are owed</Text>
-          <Text style={styles.balanceAmount}>{formatCurrency(totalOwed)}</Text>
-        </View>
-        <View style={[styles.balanceCard, { backgroundColor: Colors.danger }]}>
-          <MaterialIcons name="arrow-upward" size={20} color={Colors.white} />
-          <Text style={styles.balanceLabel}>You owe</Text>
-          <Text style={styles.balanceAmount}>{formatCurrency(totalOwes)}</Text>
-        </View>
-      </View>
-
-      {/* Net Balance Banner */}
-      <Card style={[styles.netCard, { borderLeftColor: netBalance >= 0 ? Colors.success : Colors.danger }]}>
-        <Text style={styles.netLabel}>Net balance</Text>
-        <Text
-          style={[
-            styles.netAmount,
-            { color: netBalance >= 0 ? Colors.success : Colors.danger },
-          ]}
-        >
+      {/* Hero Balance Card */}
+      <View style={styles.heroCard}>
+        <Text style={styles.heroLabel}>Net balance</Text>
+        <Text style={[styles.heroAmount, { color: netBalance >= 0 ? Colors.success : Colors.danger }]}>
           {netBalance >= 0 ? '+' : ''}{formatCurrency(netBalance)}
         </Text>
-      </Card>
-
-      {/* Pending Settlements Alert */}
-      {pendingCount > 0 && (
-        <TouchableOpacity
-          style={styles.pendingBanner}
-          onPress={() =>
-            navigation.navigate('Main', { screen: 'Settlements' } as any)
-          }
-        >
-          <MaterialIcons name="hourglass-empty" size={20} color={Colors.warning} />
-          <Text style={styles.pendingText}>
-            {pendingCount} pending settlement{pendingCount > 1 ? 's' : ''} need your attention
-          </Text>
-          <MaterialIcons name="chevron-right" size={18} color={Colors.warning} />
-        </TouchableOpacity>
-      )}
+        <View style={styles.heroDivider} />
+        <View style={styles.heroStats}>
+          <View style={styles.heroStat}>
+            <View style={styles.heroStatIcon}>
+              <MaterialIcons name="arrow-downward" size={14} color={Colors.success} />
+            </View>
+            <Text style={styles.heroStatValue}>{formatCurrency(totalOwed)}</Text>
+            <Text style={styles.heroStatLabel}>owed to you</Text>
+          </View>
+          <View style={styles.heroStatDivider} />
+          <View style={styles.heroStat}>
+            <View style={[styles.heroStatIcon, { backgroundColor: Colors.danger + '18' }]}>
+              <MaterialIcons name="arrow-upward" size={14} color={Colors.danger} />
+            </View>
+            <Text style={styles.heroStatValue}>{formatCurrency(totalOwes)}</Text>
+            <Text style={styles.heroStatLabel}>you owe</Text>
+          </View>
+        </View>
+      </View>
 
       {/* Quick Actions */}
       <View style={styles.sectionHeader}>
@@ -260,13 +267,31 @@ const DashboardScreen: React.FC = () => {
       )}
 
       {/* FAB spacer */}
-      <View style={{ height: 80 }} />
+        <View style={{ height: 80 }} />
+      </Screen>
 
-      {/* FAB */}
-      <TouchableOpacity style={styles.fab} onPress={openAddExpense}>
+      {/* FAB — fixed to bottom-right corner */}
+      <TouchableOpacity
+        style={[styles.fab, { bottom: Spacing.xl }]}
+        onPress={openAddExpense}
+        activeOpacity={0.85}
+      >
         <MaterialIcons name="add" size={28} color={Colors.white} />
       </TouchableOpacity>
-    </Screen>
+
+      {/* Notification Panel */}
+      <NotificationPanel
+        visible={notifVisible}
+        onClose={() => setNotifVisible(false)}
+        notifications={notifications}
+        onPressSettlement={(id) =>
+          navigation.navigate('Main', {
+            screen: 'Settlements',
+            params: { screen: 'SettlementDetail', params: { settlementId: id } },
+          } as any)
+        }
+      />
+    </View>
   );
 };
 
@@ -286,70 +311,125 @@ const QuickAction: React.FC<QuickActionProps> = ({ icon, label, onPress }) => (
 );
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+  },
   content: { padding: Spacing.base },
-  flex: { flex: 1 },
-  greetingRow: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.xl,
+    justifyContent: 'space-between',
+    marginBottom: Spacing.base,
+    paddingVertical: Spacing.xs,
   },
-  greeting: {
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  logoImage: {
+    width: 64,
+    height: 64,
+  },
+  logoText: {
+    fontSize: 28,
+    fontWeight: Typography.extrabold,
+    letterSpacing: -0.8,
+    includeFontPadding: false,
+  },
+  logoTextWho: {
+    color: Colors.primary,
+  },
+  logoTextOwes: {
+    color: Colors.textPrimary,
+  },
+  heroCard: {
+    backgroundColor: '#F4FEFC',
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    marginBottom: Spacing.base,
+    alignItems: 'center',
+    ...Shadows.base,
+  },
+  heroLabel: {
+    fontSize: Typography.sm,
+    color: Colors.textTertiary,
+    fontWeight: Typography.medium,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: Spacing.xs,
+  },
+  heroAmount: {
+    fontSize: Typography['4xl'],
+    fontWeight: Typography.extrabold,
+    letterSpacing: -1,
+    marginBottom: Spacing.base,
+  },
+  heroDivider: {
+    height: 1,
+    width: '100%',
+    backgroundColor: Colors.border,
+    marginBottom: Spacing.base,
+  },
+  heroStats: {
+    flexDirection: 'row',
+    width: '100%',
+  },
+  heroStat: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+  },
+  heroStatIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.success + '18',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  heroStatValue: {
     fontSize: Typography.base,
-    color: Colors.textSecondary,
-  },
-  userName: {
-    fontSize: Typography['2xl'],
     fontWeight: Typography.bold,
     color: Colors.textPrimary,
   },
-  balanceRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  balanceCard: {
-    flex: 1,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.base,
-    alignItems: 'flex-start',
-    gap: Spacing.xs,
-  },
-  balanceLabel: {
+  heroStatLabel: {
     fontSize: Typography.xs,
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: Typography.medium,
+    color: Colors.textTertiary,
   },
-  balanceAmount: {
-    fontSize: Typography.xl,
+  heroStatDivider: {
+    width: 1,
+    backgroundColor: Colors.border,
+    marginHorizontal: Spacing.sm,
+  },
+  bellButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primary + '18',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: Colors.danger,
+    borderRadius: 7,
+    minWidth: 14,
+    height: 14,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#F4FEFC',
+  },
+  bellBadgeText: {
+    fontSize: 8,
     fontWeight: Typography.bold,
     color: Colors.white,
-  },
-  netCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-    borderLeftWidth: 4,
-    paddingLeft: Spacing.md,
-  },
-  netLabel: { fontSize: Typography.sm, color: Colors.textSecondary },
-  netAmount: { fontSize: Typography.lg, fontWeight: Typography.bold },
-  pendingBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.warning + '15',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.base,
-    marginBottom: Spacing.base,
-    gap: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.warning + '40',
-  },
-  pendingText: {
-    flex: 1,
-    fontSize: Typography.sm,
-    color: Colors.warning,
-    fontWeight: Typography.medium,
+    lineHeight: 11,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -412,7 +492,6 @@ const styles = StyleSheet.create({
   balanceLineAmount: { fontSize: Typography.sm, fontWeight: Typography.medium },
   fab: {
     position: 'absolute',
-    bottom: Spacing.xl,
     right: Spacing.base,
     width: 56,
     height: 56,

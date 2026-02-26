@@ -4,20 +4,20 @@
  */
 
 export const Colors = {
-  // Brand
-  primary: '#2563eb',          // blue-600
-  primaryLight: '#3b82f6',     // blue-500
-  primaryDark: '#1d4ed8',      // blue-700
+  // Brand — teal / emerald
+  primary: '#2DA58E',          // emerald teal
+  primaryLight: '#4BBFA8',     // lighter teal
+  primaryDark: '#1F8A74',      // deeper teal
 
   // Semantic
-  success: '#22c55e',
-  successLight: '#dcfce7',
-  danger: '#ef4444',
-  dangerLight: '#fee2e2',
-  warning: '#f59e0b',
-  warningLight: '#fef3c7',
-  info: '#06b6d4',
-  infoLight: '#cffafe',
+  success: '#3DAA72',
+  successLight: '#DFF5EB',
+  danger: '#D46B6B',
+  dangerLight: '#FAEAEA',
+  warning: '#C9923A',
+  warningLight: '#FCEEDD',
+  info: '#3A9EBB',
+  infoLight: '#DCF3F8',
 
   // Neutrals
   white: '#ffffff',
@@ -34,18 +34,18 @@ export const Colors = {
   gray900: '#111827',
 
   // Surfaces
-  background: '#f8fafc',
+  background: '#EAF7F3',
   surface: '#ffffff',
-  surfaceSecondary: '#f1f5f9',
-  border: '#e2e8f0',
-  borderLight: '#f1f5f9',
+  surfaceSecondary: '#F0FAF7',
+  border: '#BDE0D8',
+  borderLight: '#DFF4EF',
 
   // Text
-  textPrimary: '#0f172a',
-  textSecondary: '#475569',
-  textTertiary: '#94a3b8',
+  textPrimary: '#0E2B25',
+  textSecondary: '#2E5A52',
+  textTertiary: '#7AADA4',
   textInverse: '#ffffff',
-  textLink: '#2563eb',
+  textLink: '#2DA58E',
 } as const;
 
 export const Spacing = {
@@ -72,15 +72,15 @@ export const BorderRadius = {
 
 export const Typography = {
   // Font sizes
-  xs: 11,
-  sm: 13,
-  base: 15,
-  md: 16,
-  lg: 18,
-  xl: 20,
-  '2xl': 24,
-  '3xl': 28,
-  '4xl': 32,
+  xs: 12,
+  sm: 14,
+  base: 16,
+  md: 17,
+  lg: 19,
+  xl: 22,
+  '2xl': 26,
+  '3xl': 30,
+  '4xl': 34,
 
   // Font weights (as string for React Native)
   normal: '400' as const,

@@ -14,6 +14,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Spacing } from '../../theme';
 
 interface ScreenProps {
@@ -73,19 +74,29 @@ const Screen: React.FC<ScreenProps> = ({
   );
 
   return (
-    <SafeAreaView
-      style={[styles.safeArea, style]}
-      edges={['bottom']}
+    <LinearGradient
+      colors={['#C5EAE3', '#D8F2EB', '#EEF8F5']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0.2, y: 1 }}
+      style={styles.gradient}
     >
-      {wrapped}
-    </SafeAreaView>
+      <SafeAreaView
+        style={[styles.safeArea, style]}
+        edges={['top', 'bottom']}
+      >
+        {wrapped}
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: 'transparent',
   },
   flex: { flex: 1 },
   content: {
