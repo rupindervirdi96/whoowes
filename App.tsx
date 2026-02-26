@@ -2,6 +2,7 @@ import './global.css';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import RootNavigator from './src/navigation';
 import ToastContainer from './src/components/ui/ToastContainer';
@@ -19,12 +20,14 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
-        <StatusBar style="auto" />
-        <RootNavigator />
-        <ToastContainer />
-        <ConfirmModal />
-      </QueryClientProvider>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          <StatusBar style="auto" />
+          <RootNavigator />
+          <ToastContainer />
+          <ConfirmModal />
+        </QueryClientProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
