@@ -1,169 +1,98 @@
 /**
  * Mock Settlements Service.
  *
- * Handles the two-way settlement confirmation flow:
- * 1. User A initiates payment → status: 'pending'
- * 2. User B confirms → status: 'confirmed', balances update
- * 2b. User B rejects → status: 'rejected'
- *
- * Real backend endpoints:
- * GET /settlements, POST /settlements, PATCH /settlements/:id/confirm, etc.
+ * Two-step flow: the payer records a payment (pending) → the recipient
+ * confirms or rejects it. Only confirmed payments change balances.
  */
 
-import {
-  Settlement,
-  CreateSettlementPayload,
-  RespondSettlementPayload,
-  User,
-} from '../../types';
-import { MOCK_SETTLEMENTS, MOCK_USERS } from '../../constants/sampleData';
+import { Settlement, CreateSettlementPayload, RespondSettlementPayload } from '../../types';
 import { generateId } from '../../utils/idGenerator';
 import { nowISO } from '../../utils/date';
 import { mockDelay } from './mockHelpers';
-
-let settlements: Settlement[] = [...MOCK_SETTLEMENTS];
-const users: User[] = [...MOCK_USERS];
+import { db, findUser } from './db';
 
 const SettlementService = {
-  /**
-   * Get all settlements for the current user.
-   * Includes both sent and received.
-   * Real backend: GET /settlements
-   */
   async getSettlements(userId: string): Promise<Settlement[]> {
     await mockDelay();
-    return settlements
+    return db.settlements
       .filter((s) => s.fromUserId === userId || s.toUserId === userId)
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
 
-  /**
-   * Get pending settlements that require action from the current user.
-   * (i.e., settlements where current user is the receiver and status is pending)
-   * Real backend: GET /settlements?status=pending&role=receiver
-   */
+  async getGroupSettlements(groupId: string): Promise<Settlement[]> {
+    await mockDelay();
+    return db.settlements.filter((s) => s.groupId === groupId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  /** Payments waiting on the current user to confirm. */
   async getPendingSettlements(userId: string): Promise<Settlement[]> {
     await mockDelay();
-    return settlements.filter(
-      (s) => s.toUserId === userId && s.status === 'pending',
+    return db.settlements.filter((s) => s.toUserId === userId && s.status === 'pending');
+  },
+
+  async getSettlement(settlementId: string): Promise<Settlement> {
+    await mockDelay(250);
+    return (
+      db.settlements.find((s) => s.id === settlementId) ??
+      Promise.reject({ message: 'Payment not found', statusCode: 404 })
     );
   },
 
-  /**
-   * Get a single settlement by ID.
-   * Real backend: GET /settlements/:id
-   */
-  async getSettlement(settlementId: string): Promise<Settlement> {
-    await mockDelay();
-    const settlement = settlements.find((s) => s.id === settlementId);
-    if (!settlement) {
-      return Promise.reject({ message: 'Settlement not found', statusCode: 404 });
-    }
-    return settlement;
-  },
-
-  /**
-   * Initiate a new settlement (User A pays User B).
-   * Real backend: POST /settlements
-   */
-  async createSettlement(
-    fromUserId: string,
-    payload: CreateSettlementPayload,
-  ): Promise<Settlement> {
+  async createSettlement(fromUserId: string, payload: CreateSettlementPayload): Promise<Settlement> {
     await mockDelay(600);
-
-    const fromUser = users.find((u) => u.id === fromUserId);
-    const toUser = users.find((u) => u.id === payload.toUserId);
-
-    if (!fromUser)
-      return Promise.reject({ message: 'Sender not found', statusCode: 404 });
-    if (!toUser)
-      return Promise.reject({ message: 'Recipient not found', statusCode: 404 });
-    if (fromUserId === payload.toUserId)
-      return Promise.reject({ message: "Can't settle with yourself", statusCode: 400 });
-
-    const newSettlement: Settlement = {
+    if (fromUserId === payload.toUserId) {
+      return Promise.reject({ message: "You can't pay yourself", statusCode: 400 });
+    }
+    const now = nowISO();
+    const settlement: Settlement = {
       id: generateId(),
       fromUserId,
       toUserId: payload.toUserId,
-      fromUser,
-      toUser,
+      fromUser: findUser(fromUserId),
+      toUser: findUser(payload.toUserId),
       amount: payload.amount,
       currency: payload.currency ?? 'USD',
       note: payload.note,
       status: 'pending',
       groupId: payload.groupId,
       expenseIds: payload.expenseIds,
-      initiatedAt: nowISO(),
-      createdAt: nowISO(),
-      updatedAt: nowISO(),
+      initiatedAt: now,
+      createdAt: now,
+      updatedAt: now,
     };
-
-    settlements.push(newSettlement);
-    return newSettlement;
+    db.settlements.push(settlement);
+    return settlement;
   },
 
-  /**
-   * Respond to a pending settlement (confirm or reject).
-   * Only the recipient (toUser) can confirm or reject.
-   * Real backend: PATCH /settlements/:id { action: 'confirm' | 'reject' }
-   */
-  async respondToSettlement(
-    userId: string,
-    payload: RespondSettlementPayload,
-  ): Promise<Settlement> {
+  async respondToSettlement(userId: string, payload: RespondSettlementPayload): Promise<Settlement> {
     await mockDelay(500);
-
-    const idx = settlements.findIndex((s) => s.id === payload.settlementId);
-    if (idx === -1)
-      return Promise.reject({ message: 'Settlement not found', statusCode: 404 });
-
-    const settlement = settlements[idx];
-
-    if (settlement.toUserId !== userId) {
-      return Promise.reject({
-        message: 'Only the recipient can confirm or reject this settlement',
-        statusCode: 403,
-      });
+    const idx = db.settlements.findIndex((s) => s.id === payload.settlementId);
+    if (idx === -1) return Promise.reject({ message: 'Payment not found', statusCode: 404 });
+    const s = db.settlements[idx];
+    if (s.toUserId !== userId) {
+      return Promise.reject({ message: 'Only the person being paid can confirm this', statusCode: 403 });
     }
-
-    if (settlement.status !== 'pending') {
-      return Promise.reject({
-        message: `Settlement is already ${settlement.status}`,
-        statusCode: 409,
-      });
+    if (s.status !== 'pending') {
+      return Promise.reject({ message: `This payment is already ${s.status}`, statusCode: 409 });
     }
-
     const now = nowISO();
-    const updated: Settlement = {
-      ...settlement,
+    db.settlements[idx] = {
+      ...s,
       status: payload.action === 'confirm' ? 'confirmed' : 'rejected',
       confirmedAt: payload.action === 'confirm' ? now : undefined,
       rejectedAt: payload.action === 'reject' ? now : undefined,
       updatedAt: now,
     };
-
-    settlements[idx] = updated;
-    return updated;
+    return db.settlements[idx];
   },
 
-  /**
-   * Cancel a pending settlement (only initiator can cancel).
-   * Real backend: DELETE /settlements/:id
-   */
   async cancelSettlement(userId: string, settlementId: string): Promise<void> {
     await mockDelay(400);
-    const settlement = settlements.find((s) => s.id === settlementId);
-    if (!settlement)
-      return Promise.reject({ message: 'Settlement not found', statusCode: 404 });
-    if (settlement.fromUserId !== userId)
-      return Promise.reject({ message: 'Only the initiator can cancel', statusCode: 403 });
-    if (settlement.status !== 'pending')
-      return Promise.reject({ message: 'Can only cancel pending settlements', statusCode: 409 });
-    settlements = settlements.filter((s) => s.id !== settlementId);
+    const s = db.settlements.find((x) => x.id === settlementId);
+    if (!s) return Promise.reject({ message: 'Payment not found', statusCode: 404 });
+    if (s.fromUserId !== userId) return Promise.reject({ message: 'Only the sender can cancel', statusCode: 403 });
+    if (s.status !== 'pending') return Promise.reject({ message: 'Only pending payments can be cancelled', statusCode: 409 });
+    db.settlements = db.settlements.filter((x) => x.id !== settlementId);
   },
 };
 

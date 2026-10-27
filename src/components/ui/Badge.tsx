@@ -1,48 +1,58 @@
-/**
- * Badge component — status chips and count indicators.
- */
-
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { Colors, Typography, BorderRadius, Spacing } from '../../theme';
+import { StyleProp, View, ViewStyle } from 'react-native';
+import { useTheme } from '../../theme';
+import Text from './Text';
+import Icon from './Icon';
 
-type BadgeVariant = 'success' | 'danger' | 'warning' | 'info' | 'neutral';
+export type BadgeTone = 'neutral' | 'primary' | 'positive' | 'negative' | 'warning' | 'info' | 'pro' | 'accent';
 
 interface BadgeProps {
   label: string;
-  variant?: BadgeVariant;
-  style?: ViewStyle;
+  tone?: BadgeTone;
+  icon?: string;
+  style?: StyleProp<ViewStyle>;
 }
 
-const VARIANTS: Record<BadgeVariant, { bg: string; text: string }> = {
-  success: { bg: Colors.successLight, text: Colors.success },
-  danger: { bg: Colors.dangerLight, text: Colors.danger },
-  warning: { bg: Colors.warningLight, text: Colors.warning },
-  info: { bg: Colors.infoLight, text: Colors.info },
-  neutral: { bg: Colors.gray100, text: Colors.gray600 },
-};
-
-const Badge: React.FC<BadgeProps> = ({ label, variant = 'neutral', style }) => {
-  const { bg, text } = VARIANTS[variant];
+const Badge: React.FC<BadgeProps> = ({ label, tone = 'neutral', icon, style }) => {
+  const { colors: c } = useTheme();
+  const map: Record<BadgeTone, [string, string]> = {
+    neutral: [c.surfaceAlt, c.textSecondary],
+    primary: [c.primarySoft, c.primary],
+    positive: [c.positiveSoft, c.positive],
+    negative: [c.negativeSoft, c.negative],
+    warning: [c.warningSoft, c.warning],
+    info: [c.infoSoft, c.info],
+    pro: [c.proSoft, c.pro],
+    accent: [c.accent, c.textOnAccent],
+  };
+  const [bg, fg] = map[tone];
   return (
-    <View style={[styles.badge, { backgroundColor: bg }, style]}>
-      <Text style={[styles.label, { color: text }]}>{label}</Text>
+    <View
+      style={[
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 4,
+          alignSelf: 'flex-start',
+          paddingHorizontal: 8,
+          paddingVertical: 3,
+          borderRadius: 999,
+          backgroundColor: bg,
+        },
+        style,
+      ]}
+    >
+      {icon ? <Icon name={icon} size={12} color={fg} /> : null}
+      <Text variant="caption" weight="bold" color={fg}>
+        {label}
+      </Text>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  badge: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 3,
-    borderRadius: BorderRadius.full,
-    alignSelf: 'flex-start',
-  },
-  label: {
-    fontSize: Typography.xs,
-    fontWeight: Typography.semibold,
-    textTransform: 'capitalize',
-  },
-});
+/** Gold "PLUS"/"PRO" tag shown next to paid features. */
+export const PlanTag: React.FC<{ plan?: 'plus' | 'pro'; style?: StyleProp<ViewStyle> }> = ({ plan = 'pro', style }) => (
+  <Badge label={plan === 'pro' ? 'PRO' : 'PLUS'} tone="pro" icon="auto-awesome" style={style} />
+);
 
 export default Badge;

@@ -1,68 +1,69 @@
-/**
- * Toast notification system.
- * Renders active toasts from UIStore at the top of the screen.
- */
-
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  ViewStyle,
-} from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useToasts, useUIStore } from '../../store/uiStore';
-import { ToastMessage, ToastType } from '../../types';
-import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../theme';
+import { useUIStore } from '../../store/uiStore';
+import { ToastMessage } from '../../types';
+import { useTheme } from '../../theme';
+import Text from './Text';
+import Icon from './Icon';
 
-const TOAST_CONFIG: Record<ToastType, { bg: string; icon: string; iconColor: string }> = {
-  success: { bg: '#f0fdf4', icon: 'check-circle', iconColor: Colors.success },
-  error:   { bg: '#fef2f2', icon: 'error',         iconColor: Colors.danger },
-  warning: { bg: '#fffbeb', icon: 'warning',        iconColor: Colors.warning },
-  info:    { bg: '#eff6ff', icon: 'info',           iconColor: Colors.primary },
-};
+const ICONS = { success: 'check-circle', error: 'error', warning: 'warning', info: 'info' } as const;
 
 const ToastItem: React.FC<{ toast: ToastMessage }> = ({ toast }) => {
+  const t = useTheme();
   const dismiss = useUIStore((s) => s.dismissToast);
-  const { bg, icon, iconColor } = TOAST_CONFIG[toast.type];
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(anim, { toValue: 1, useNativeDriver: true, damping: 16, stiffness: 180 }).start();
+  }, [anim]);
+
+  const tint = {
+    success: t.colors.positive,
+    error: t.colors.negative,
+    warning: t.colors.warning,
+    info: t.colors.primary,
+  }[toast.type];
 
   return (
-    <View style={[styles.toast, { backgroundColor: bg }, Shadows.md as ViewStyle]}>
-      <MaterialIcons
-        name={icon as keyof typeof MaterialIcons.glyphMap}
-        size={20}
-        color={iconColor}
-        style={styles.icon}
-      />
-      <Text style={styles.message} numberOfLines={3}>
-        {toast.message}
-      </Text>
-      <TouchableOpacity
+    <Animated.View
+      style={{
+        opacity: anim,
+        transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }) }],
+      }}
+    >
+      <Pressable
         onPress={() => dismiss(toast.id)}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityRole="alert"
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          paddingVertical: 12,
+          paddingHorizontal: 14,
+          borderRadius: t.radius.md,
+          backgroundColor: t.isDark ? t.colors.surfaceRaised : '#16132D',
+          borderWidth: t.isDark ? 1 : 0,
+          borderColor: t.colors.border,
+          ...(t.elevation(3) as object),
+        }}
       >
-        <MaterialIcons name="close" size={18} color={Colors.gray400} />
-      </TouchableOpacity>
-    </View>
+        <Icon name={ICONS[toast.type]} size={20} color={tint} />
+        <Text variant="label" color="#FFFFFF" style={{ flex: 1 }} numberOfLines={3}>
+          {toast.message}
+        </Text>
+      </Pressable>
+    </Animated.View>
   );
 };
 
 const ToastContainer: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const toasts = useToasts();
-
+  const toasts = useUIStore((s) => s.toasts);
   if (toasts.length === 0) return null;
-
   return (
     <View
-      style={[
-        styles.container,
-        { top: insets.top + Spacing.sm },
-      ]}
       pointerEvents="box-none"
+      style={{ position: 'absolute', top: insets.top + 8, left: 16, right: 16, zIndex: 9999, gap: 8 }}
     >
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} />
@@ -70,30 +71,5 @@ const ToastContainer: React.FC = () => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    left: Spacing.base,
-    right: Spacing.base,
-    zIndex: 9999,
-    gap: Spacing.sm,
-  },
-  toast: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-    borderRadius: BorderRadius.base,
-    gap: Spacing.sm,
-  },
-  icon: { flexShrink: 0 },
-  message: {
-    flex: 1,
-    fontSize: Typography.sm,
-    color: Colors.textPrimary,
-    fontWeight: Typography.medium,
-    lineHeight: 18,
-  },
-});
 
 export default ToastContainer;

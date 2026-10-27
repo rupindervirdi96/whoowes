@@ -1,0 +1,11 @@
+<!-- WhoOwes owl glyph (foreground only, 1024 artboard). The brow is a "W"; the pupils are split coins. -->
+<g id="owl">
+  <path d="M196 300 L364 418 L512 340 L660 418 L828 300" fill="none" stroke="#D4FF3A" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="364" cy="576" r="158" fill="#FFFFFF"/>
+  <circle cx="660" cy="576" r="158" fill="#FFFFFF"/>
+  <circle cx="364" cy="576" r="76" fill="none" stroke="#15112E" stroke-width="22"/>
+  <path d="M364 500 A76 76 0 0 1 364 652 Z" fill="#15112E"/>
+  <circle cx="660" cy="576" r="76" fill="none" stroke="#15112E" stroke-width="22"/>
+  <path d="M660 500 A76 76 0 0 0 660 652 Z" fill="#15112E"/>
+  <path d="M474 748 L550 748 L512 812 Z" fill="#D4FF3A" stroke="#D4FF3A" stroke-width="22" stroke-linejoin="round"/>
+</g>

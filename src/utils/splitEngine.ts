@@ -227,6 +227,44 @@ function calculateItemBasedSplit(input: ItemBasedSplitInput): SplitResult {
   return { splits, isValid: true };
 }
 
+// ─── Receipt item split (exact to the cent) ───────────────────────────────────
+
+/**
+ * Splits receipt items between people, then shares tax/tip in proportion to
+ * what each person ordered. Unassigned items are shared by everyone.
+ * Works in integer cents and hands leftover cents to the largest shares, so
+ * the result always sums exactly to items + extras.
+ */
+export function splitReceiptItems(
+  items: Array<{ price: number; quantity: number; assignedTo: string[] }>,
+  participantIds: string[],
+  extras: number,
+): Record<string, number> {
+  const people = participantIds.length ? participantIds : [];
+  const raw: Record<string, number> = Object.fromEntries(people.map((id) => [id, 0]));
+  if (people.length === 0) return {};
+
+  let itemsTotal = 0;
+  for (const item of items) {
+    const cost = item.price * item.quantity;
+    itemsTotal += cost;
+    const owners = item.assignedTo.filter((id) => id in raw);
+    const who = owners.length ? owners : people;
+    for (const id of who) raw[id] += cost / who.length;
+  }
+  for (const id of people) {
+    raw[id] += itemsTotal > 0 ? (raw[id] / itemsTotal) * extras : extras / people.length;
+  }
+
+  const totalCents = Math.round((itemsTotal + extras) * 100);
+  const floors = people.map((id) => ({ id, cents: Math.floor(raw[id] * 100), frac: raw[id] * 100 - Math.floor(raw[id] * 100) }));
+  let leftover = totalCents - floors.reduce((s, f) => s + f.cents, 0);
+  floors.sort((a, b) => b.frac - a.frac);
+  for (let i = 0; leftover > 0; i = (i + 1) % floors.length, leftover--) floors[i].cents += 1;
+
+  return Object.fromEntries(floors.map((f) => [f.id, f.cents / 100]));
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**

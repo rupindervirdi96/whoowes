@@ -1,3 +1,2 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Web only: inputs draw their own focus border, so hide the browser outline. */
+input:focus, textarea:focus { outline: none; }

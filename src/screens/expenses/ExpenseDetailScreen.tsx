@@ -1,279 +1,182 @@
-﻿/**
- * Expense Detail Screen
- */
-
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-} from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { MaterialIcons } from '@expo/vector-icons';
-import { ExpensesStackParamList, RootStackParamList } from '../../types/navigation';
+﻿import React, { useLayoutEffect } from 'react';
+import { View } from 'react-native';
+import { useTheme } from '../../theme';
+import { RootScreenProps } from '../../types/navigation';
 import { useExpense, useDeleteExpense, useMarkSplitPaid } from '../../hooks/useExpenses';
+import { useGroups } from '../../hooks/useGroups';
 import { useCurrentUser } from '../../hooks/useAuth';
-import { useShowModal, useHideModal } from '../../store/uiStore';
-import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../theme';
+import { useShowModal } from '../../store/uiStore';
 import { formatCurrency } from '../../utils/currency';
 import { formatFullDate } from '../../utils/date';
-import { CATEGORY_ICONS, CATEGORY_COLORS } from '../../constants';
-import Avatar from '../../components/ui/Avatar';
-import Badge from '../../components/ui/Badge';
-import Button from '../../components/ui/Button';
-import { SkeletonCard } from '../../components/ui/Skeleton';
+import { expenseForMe, firstName } from '../../utils/money';
+import { CATEGORY_BY_ID, SPLIT_TYPES } from '../../constants';
 import Screen from '../../components/ui/Screen';
+import Text from '../../components/ui/Text';
+import Card from '../../components/ui/Card';
+import Avatar from '../../components/ui/Avatar';
+import Button from '../../components/ui/Button';
+import Badge from '../../components/ui/Badge';
+import IconButton from '../../components/ui/IconButton';
+import CategoryIcon from '../../components/ui/CategoryIcon';
+import ListRow, { SectionHeader } from '../../components/ui/ListRow';
+import { SkeletonList } from '../../components/ui/Skeleton';
+import EmptyState from '../../components/ui/EmptyState';
 
-type Props = NativeStackScreenProps<ExpensesStackParamList, 'ExpenseDetail'>;
-
-const ExpenseDetailScreen: React.FC<Props> = ({ route, navigation }) => {
+const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route, navigation }) => {
   const { expenseId } = route.params;
-  const user = useCurrentUser();
-  const { data: expense, isLoading, refetch } = useExpense(expenseId);
-  const { mutate: deleteExpense, isPending: deleting } = useDeleteExpense();
-  const { mutate: markPaid, isPending: marking } = useMarkSplitPaid();
+  const t = useTheme();
+  const me = useCurrentUser()!;
+  const { data: expense, isLoading, isError } = useExpense(expenseId);
+  const { data: groups = [] } = useGroups();
+  const del = useDeleteExpense();
+  const markPaid = useMarkSplitPaid();
   const showModal = useShowModal();
-  const hideModal = useHideModal();
 
-  if (isLoading || !expense) {
+  const canDelete = !!expense && (expense.createdBy === me.id || expense.paidBy === me.id);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () =>
+        canDelete ? (
+          <IconButton
+            icon="delete-outline"
+            variant="ghost"
+            size={40}
+            accessibilityLabel="Delete expense"
+            onPress={() =>
+              showModal({
+                title: 'Delete this expense?',
+                body: 'Balances for everyone on it will update. This can’t be undone.',
+                confirmLabel: 'Delete',
+                variant: 'danger',
+                onConfirm: () => del.mutate(expenseId, { onSuccess: () => navigation.goBack() }),
+              })
+            }
+          />
+        ) : null,
+    });
+  }, [navigation, canDelete, expenseId, del, showModal]);
+
+  if (isLoading) {
     return (
-      <Screen scrollable>
-        <SkeletonCard />
-        <SkeletonCard />
+      <Screen>
+        <SkeletonList rows={4} />
+      </Screen>
+    );
+  }
+  if (isError || !expense) {
+    return (
+      <Screen>
+        <EmptyState emoji="🫥" title="Expense not found" body="It may have been deleted." actionLabel="Go back" onAction={() => navigation.goBack()} />
       </Screen>
     );
   }
 
-  const iconName = (CATEGORY_ICONS[expense.category] ?? 'receipt') as keyof typeof MaterialIcons.glyphMap;
-  const iconColor = CATEGORY_COLORS[expense.category] ?? Colors.primary;
-  const myShare = expense.splits.find((s) => s.userId === user?.id);
-  const isMyExpense = expense.paidBy === user?.id;
-
-  const handleDelete = () => {
-    showModal({
-      title: 'Delete Expense',
-      body: `Delete "${expense.title}"? This cannot be undone.`,
-      confirmLabel: 'Delete',
-      cancelLabel: 'Cancel',
-      variant: 'danger',
-      onConfirm: () => {
-        hideModal();
-        deleteExpense(expenseId, { onSuccess: () => navigation.goBack() });
-      },
-      onCancel: hideModal,
-    });
-  };
-
-  const handleMarkPaid = () => {
-    if (!myShare) return;
-    markPaid({ expenseId, userId: user!.id });
-  };
+  const mine = expense.splits.find((s) => s.userId === me.id);
+  const position = expenseForMe(expense, me.id);
+  const group = groups.find((g) => g.id === expense.groupId);
+  const iPaid = expense.paidBy === me.id;
 
   return (
-    <Screen scrollable refreshing={false} onRefresh={refetch}>
-      {/* Header Card */}
-      <View style={styles.header}>
-        <View style={[styles.headerIcon, { backgroundColor: iconColor + '20' }]}>
-          <MaterialIcons name={iconName} size={32} color={iconColor} />
-        </View>
-        <Text style={styles.title}>{expense.title}</Text>
-        <Text style={styles.amount}>{formatCurrency(expense.amount)}</Text>
-        {expense.description ? (
-          <Text style={styles.description}>{expense.description}</Text>
+    <Screen>
+      <View style={{ alignItems: 'center', paddingVertical: t.spacing.base }}>
+        <CategoryIcon category={expense.category} size={64} />
+        <Text variant="h2" align="center" style={{ marginTop: 12 }}>
+          {expense.title}
+        </Text>
+        <Text variant="display" tabular style={{ marginTop: 4 }}>
+          {formatCurrency(expense.amount, expense.currency)}
+        </Text>
+        <Text variant="caption" tone="tertiary" style={{ marginTop: 4 }}>
+          {iPaid ? 'You' : expense.paidByUser.name} paid · {formatFullDate(expense.date)}
+        </Text>
+        {position.amount > 0 ? (
+          <Badge
+            style={{ alignSelf: 'center', marginTop: 12 }}
+            label={`${position.label} ${formatCurrency(position.amount)}`}
+            tone={position.tone === 'positive' ? 'positive' : position.tone === 'negative' ? 'negative' : 'neutral'}
+          />
         ) : null}
-        <Text style={styles.date}>{formatFullDate(expense.date)}</Text>
       </View>
 
-      {/* Status */}
-      <View style={styles.statusRow}>
-        {myShare && !isMyExpense && (
-          <>
-            <Badge
-              label={myShare.paid ? 'Your share paid' : `You owe ${formatCurrency(myShare.amount)}`}
-              variant={myShare.paid ? 'success' : 'danger'}
-            />
-            {!myShare.paid && (
-              <Button
-                title="Mark as Paid"
-                size="sm"
-                variant="primary"
-                loading={marking}
-                onPress={handleMarkPaid}
-              />
-            )}
-          </>
-        )}
-        {isMyExpense && (
-          <Badge label="You paid for this" variant="info" />
-        )}
-      </View>
-
-      {/* Paid By */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Paid By</Text>
-        <View style={styles.paidByRow}>
-          <Avatar name={expense.paidByUser.name} size="md" />
-          <View>
-            <Text style={styles.paidByName}>
-              {expense.paidBy === user?.id ? 'You' : expense.paidByUser.name}
-            </Text>
-            <Text style={styles.paidByAmount}>{formatCurrency(expense.amount)}</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Splits */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Split ({expense.splits.length} people)</Text>
-        {expense.splits.map((split) => (
-          <View key={split.userId} style={styles.splitRow}>
-            <Avatar name={split.user.name} size="sm" />
-            <Text style={styles.splitName}>
-              {split.userId === user?.id ? 'You' : split.user.name}
-            </Text>
-            {split.percentage != null && (
-              <Text style={styles.splitPct}>{split.percentage}%</Text>
-            )}
-            <Text
-              style={[
-                styles.splitAmount,
-                { color: split.paid ? Colors.success : Colors.textPrimary },
-              ]}
-            >
-              {formatCurrency(split.amount)}
-            </Text>
-            {split.paid ? (
-              <MaterialIcons name="check-circle" size={18} color={Colors.success} />
-            ) : (
-              <MaterialIcons name="radio-button-unchecked" size={18} color={Colors.gray300} />
-            )}
-          </View>
-        ))}
-      </View>
-
-      {/* Items (if item-based) */}
-      {expense.items && expense.items.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Receipt Items</Text>
-          {expense.items.map((item) => (
-            <View key={item.id} style={styles.itemRow}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemQty}>Ã—{item.quantity}</Text>
-              <Text style={styles.itemPrice}>{formatCurrency(item.price)}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Metadata */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Details</Text>
-        <DetailRow label="Category" value={expense.category.charAt(0).toUpperCase() + expense.category.slice(1)} />
-        <DetailRow label="Split Type" value={expense.splitType.replace('_', ' ')} />
-        <DetailRow label="Currency" value={expense.currency} />
-        {expense.groupId && <DetailRow label="Group" value={`Group #${expense.groupId}`} />}
-      </View>
-
-      {/* Delete */}
-      {(isMyExpense || expense.createdBy === user?.id) && (
-        <View style={styles.dangerZone}>
+      {mine && !iPaid && !mine.paid ? (
+        <View style={{ flexDirection: 'row', gap: 10 }}>
           <Button
-            title="Delete Expense"
-            variant="danger"
-            size="sm"
-            loading={deleting}
-            onPress={handleDelete}
+            title="I paid this back"
+            icon="check"
+            variant="secondary"
+            style={{ flex: 1 }}
+            loading={markPaid.isPending}
+            onPress={() => markPaid.mutate({ expenseId, userId: me.id })}
+          />
+          <Button
+            title={`Pay ${firstName(expense.paidByUser.name)}`}
+            icon="swap-horiz"
+            style={{ flex: 1 }}
+            onPress={() => navigation.navigate('SettleUp', { userId: expense.paidBy, amount: mine.amount, groupId: expense.groupId ?? undefined })}
           />
         </View>
-      )}
+      ) : null}
+
+      <SectionHeader title={`Split ${SPLIT_TYPES.find((s) => s.id === expense.splitType)?.label.toLowerCase() ?? ''}`} />
+      <Card padding={4} style={{ paddingHorizontal: 12 }}>
+        {expense.splits.map((s, i) => {
+          const isPayer = s.userId === expense.paidBy;
+          return (
+            <ListRow
+              key={s.userId}
+              divider={i < expense.splits.length - 1}
+              leading={<Avatar name={s.user.name} size="sm" />}
+              title={s.userId === me.id ? 'You' : s.user.name}
+              subtitle={isPayer ? 'paid the bill' : s.paid ? 'paid back' : 'owes'}
+              trailing={
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text variant="bodyStrong" tabular tone={isPayer || s.paid ? 'tertiary' : 'default'}>
+                    {formatCurrency(s.amount, expense.currency)}
+                  </Text>
+                  {s.percentage != null ? (
+                    <Text variant="caption" tone="tertiary">
+                      {s.percentage}%
+                    </Text>
+                  ) : null}
+                </View>
+              }
+            />
+          );
+        })}
+      </Card>
+
+      {expense.items && expense.items.length > 0 ? (
+        <>
+          <SectionHeader title="Receipt items" />
+          <Card padding={4} style={{ paddingHorizontal: 12 }}>
+            {expense.items.map((item, i) => (
+              <ListRow
+                key={item.id}
+                divider={i < expense.items!.length - 1}
+                title={item.name}
+                subtitle={item.quantity > 1 ? `×${item.quantity}` : undefined}
+                trailing={<Text tabular>{formatCurrency(item.price * item.quantity)}</Text>}
+              />
+            ))}
+          </Card>
+        </>
+      ) : null}
+
+      <SectionHeader title="Details" />
+      <Card padding={4} style={{ paddingHorizontal: 12 }}>
+        <ListRow title="Category" trailing={<Text tone="secondary">{CATEGORY_BY_ID[expense.category].label}</Text>} divider />
+        <ListRow
+          title="Group"
+          trailing={<Text tone={group ? 'primary' : 'secondary'}>{group?.name ?? 'None'}</Text>}
+          onPress={group ? () => navigation.navigate('GroupDetail', { groupId: group.id }) : undefined}
+          divider={!!expense.description || !!expense.receiptId}
+        />
+        {expense.receiptId ? <ListRow title="Receipt" trailing={<Badge label="Scanned with AI" tone="primary" icon="auto-awesome" />} divider={!!expense.description} /> : null}
+        {expense.description ? <ListRow title="Notes" subtitle={expense.description} /> : null}
+      </Card>
     </Screen>
   );
 };
 
-const DetailRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <View style={styles.detailRow}>
-    <Text style={styles.detailLabel}>{label}</Text>
-    <Text style={styles.detailValue}>{value}</Text>
-  </View>
-);
-
-const styles = StyleSheet.create({
-  header: {
-    alignItems: 'center',
-    padding: Spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    gap: Spacing.xs,
-  },
-  headerIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: BorderRadius.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.xs,
-  },
-  title: { fontSize: Typography.xl, fontWeight: Typography.bold, color: Colors.textPrimary, textAlign: 'center' },
-  amount: { fontSize: Typography['3xl'], fontWeight: Typography.bold, color: Colors.primary },
-  description: { fontSize: Typography.sm, color: Colors.textSecondary, textAlign: 'center' },
-  date: { fontSize: Typography.xs, color: Colors.textTertiary },
-  statusRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    alignItems: 'center',
-    padding: Spacing.base,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    justifyContent: 'center',
-  },
-  section: { padding: Spacing.base },
-  sectionTitle: {
-    fontSize: Typography.sm,
-    fontWeight: Typography.semibold,
-    color: Colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: Spacing.sm,
-  },
-  paidByRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  paidByName: { fontSize: Typography.base, fontWeight: Typography.semibold, color: Colors.textPrimary },
-  paidByAmount: { fontSize: Typography.sm, color: Colors.textTertiary },
-  splitRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    gap: Spacing.sm,
-  },
-  splitName: { flex: 1, fontSize: Typography.sm, color: Colors.textPrimary },
-  splitPct: { fontSize: Typography.xs, color: Colors.textTertiary, width: 36 },
-  splitAmount: { fontSize: Typography.sm, fontWeight: Typography.semibold, width: 70, textAlign: 'right' },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  itemName: { flex: 1, fontSize: Typography.sm, color: Colors.textPrimary },
-  itemQty: { fontSize: Typography.xs, color: Colors.textTertiary, marginRight: Spacing.sm },
-  itemPrice: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.textPrimary },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  detailLabel: { fontSize: Typography.sm, color: Colors.textSecondary },
-  detailValue: { fontSize: Typography.sm, fontWeight: Typography.medium, color: Colors.textPrimary },
-  dangerZone: { padding: Spacing.xl, alignItems: 'center' },
-});
-
 export default ExpenseDetailScreen;
-

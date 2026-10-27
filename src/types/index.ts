@@ -38,6 +38,44 @@ export interface AuthResponse {
   token: string;
 }
 
+/** Step 1 of phone sign-in: a code was texted to the number. */
+export interface PhoneCodeSent {
+  phone: string; // E.164
+  isNewUser: boolean;
+  /** Only in demo mode / development servers: the code to type. */
+  devCode?: string;
+}
+
+// ─── Contacts ────────────────────────────────────────────────────────────────
+
+/** 'demo' = no address book on this platform (web), sample contacts shown instead. */
+export type ContactsPermission = 'granted' | 'denied' | 'undetermined' | 'unavailable' | 'demo';
+
+/** How a contact who is on WhoOwes relates to me. */
+export type ContactFriendState = 'friend' | 'requested' | 'incoming' | 'none';
+
+export interface ContactMatch {
+  /** Address-book id + number, unique per row. */
+  key: string;
+  contactName: string;
+  phone: string; // E.164
+  /** Set when this number belongs to a WhoOwes user. */
+  user?: User;
+  state: ContactFriendState;
+  /** Incoming friend request id, when state === 'incoming'. */
+  requestId?: string;
+}
+
+export interface ContactMatchResult {
+  permission: ContactsPermission;
+  /** False when the user said "don't ask again"; only Settings can grant it now. */
+  canAskAgain: boolean;
+  onWhoOwes: ContactMatch[];
+  invite: ContactMatch[];
+  /** Demo mode: some contacts were shown as members so the feature can be tried. */
+  demoSeeded: boolean;
+}
+
 // ─── Friends ─────────────────────────────────────────────────────────────────
 
 export type FriendStatus = 'pending' | 'accepted' | 'blocked';
@@ -52,7 +90,17 @@ export interface Friend {
 }
 
 export interface AddFriendPayload {
-  emailOrPhone: string;
+  /** Add a known WhoOwes user directly (e.g. from contact matching). */
+  userId?: string;
+  emailOrPhone?: string;
+}
+
+/** "Alex reminded you": shown in Needs your attention until dismissed. */
+export interface Reminder {
+  id: string;
+  fromUser: User;
+  amount?: number;
+  createdAt: string;
 }
 
 // ─── Groups ──────────────────────────────────────────────────────────────────
@@ -164,8 +212,10 @@ export interface ParsedReceipt {
   items: ReceiptItem[];
   subtotal: number;
   tax: number;
+  tip?: number;
   total: number;
   currency: string;
+  /** Anything the AI flagged as unclear while reading the receipt. */
   rawText?: string;
 }
 
@@ -242,6 +292,74 @@ export interface RespondSettlementPayload {
   action: 'confirm' | 'reject';
 }
 
+// ─── Activity ────────────────────────────────────────────────────────────────
+
+export type ActivityItem =
+  | { kind: 'expense'; id: string; date: string; expense: Expense }
+  | { kind: 'settlement'; id: string; date: string; settlement: Settlement };
+
+// ─── Billing / Plans ─────────────────────────────────────────────────────────
+
+export type PlanId = 'free' | 'plus' | 'pro';
+export type BillingInterval = 'month' | 'year';
+
+/** Features that can be gated behind a paid plan. */
+export type Feature =
+  | 'receipt_scan'
+  | 'ai_quick_add'
+  | 'ai_split_assistant'
+  | 'ai_insights'
+  | 'csv_export';
+
+export type SubscriptionStatus =
+  | 'none'
+  | 'trialing'
+  | 'active'
+  | 'past_due'
+  | 'canceled'
+  | 'incomplete';
+
+export interface Subscription {
+  plan: PlanId;
+  status: SubscriptionStatus;
+  interval?: BillingInterval;
+  currentPeriodEnd?: string;
+  cancelAtPeriodEnd?: boolean;
+  /** AI receipt scans used in the current calendar month. */
+  scansUsed: number;
+  /** null = unlimited */
+  scansLimit: number | null;
+  /** True when the app is running against the local mock (no real charges). */
+  isDemo?: boolean;
+}
+
+// ─── AI ──────────────────────────────────────────────────────────────────────
+
+export interface QuickAddDraft {
+  title: string;
+  amount: number;
+  currency: string;
+  category: ExpenseCategory;
+  paidBy: string;
+  participantIds: string[];
+  splitType: 'equal' | 'custom';
+  customAmounts?: Record<string, number>;
+  groupId?: string;
+  date?: string;
+  /** Short note from the AI about anything it was unsure of. */
+  note?: string;
+}
+
+export interface SpendingInsights {
+  month: string;
+  total: number;
+  previousTotal: number;
+  byCategory: Array<{ category: ExpenseCategory; amount: number }>;
+  headline: string;
+  highlights: string[];
+  tips: string[];
+}
+
 // ─── API ─────────────────────────────────────────────────────────────────────
 
 export interface ApiResponse<T> {
@@ -261,6 +379,10 @@ export interface PaginatedResponse<T> {
 export interface ApiError {
   message: string;
   statusCode: number;
+  /** Machine-readable reason, e.g. 'upgrade_required' or 'quota_exceeded'. */
+  code?: string;
+  /** For gating errors: which feature the user tried to use. */
+  feature?: Feature;
   errors?: Record<string, string[]>;
 }
 

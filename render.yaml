@@ -1,0 +1,45 @@
+# Render Blueprint: Dashboard → New → Blueprint → pick this repo.
+# Creates the WhoOwes API (web service) and its PostgreSQL database.
+# Values marked `sync: false` are asked for when you create the Blueprint.
+
+services:
+  - type: web
+    name: whoowes-api
+    runtime: node
+    rootDir: server
+    plan: 0.5c-512mb # smallest always-on instance. "free" works for trying it out but sleeps after 15 min idle.
+    region: oregon
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: whoowes-db
+          property: connectionString
+      - key: AUTH_JWT_SECRET
+        generateValue: true
+      # Phone sign-in codes (Twilio Console → Verify → Services)
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_VERIFY_SERVICE_SID
+        sync: false
+      # AI receipt reading (console.anthropic.com → API keys)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Subscriptions (optional until you charge: dashboard.stripe.com)
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+
+databases:
+  - name: whoowes-db
+    plan: 0.1c-256mb # smallest paid database. "free" databases are deleted after 30 days.
+    region: oregon
+    databaseName: whoowes
+    user: whoowes

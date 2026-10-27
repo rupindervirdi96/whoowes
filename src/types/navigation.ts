@@ -1,68 +1,68 @@
 /**
  * React Navigation typed param lists.
- * Every navigator and screen is typed here for full type safety.
+ *
+ * Layout: one root stack holds the tab bar plus every detail / modal screen,
+ * so any screen can open any other without nested-navigator casts.
  */
 
 import { NavigatorScreenParams } from '@react-navigation/native';
-
-// ─── Auth Stack ───────────────────────────────────────────────────────────────
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { Feature, QuickAddDraft } from './index';
 
 export type AuthStackParamList = {
+  Welcome: undefined;
+  PhoneVerify: { phone: string; isNewUser: boolean; devCode?: string };
   Login: undefined;
   Register: undefined;
 };
 
-// ─── Friends Stack ────────────────────────────────────────────────────────────
-
-export type FriendsStackParamList = {
-  FriendsList: undefined;
-  AddFriend: undefined;
-  FriendDetail: { friendId: string; friendName: string };
-};
-
-// ─── Groups Stack ─────────────────────────────────────────────────────────────
-
-export type GroupsStackParamList = {
-  GroupsList: undefined;
-  CreateGroup: undefined;
-  GroupDetail: { groupId: string; groupName: string };
-  GroupBalances: { groupId: string; groupName: string };
-};
-
-// ─── Expenses Stack ───────────────────────────────────────────────────────────
-
-export type ExpensesStackParamList = {
-  AddExpense: { groupId?: string };
-  ManualExpense: { groupId?: string; receiptId?: string };
-  ReceiptUpload: { groupId?: string; fileType?: 'image' | 'pdf' };
-  ReceiptReview: { receiptId: string; groupId?: string };
-  ExpenseDetail: { expenseId: string };
-};
-
-// ─── Settlements Stack ────────────────────────────────────────────────────────
-
-export type SettlementsStackParamList = {
-  SettlementsList: undefined;
-  InitiateSettlement: { toUserId: string; suggestedAmount?: number; groupId?: string };
-  PendingSettlements: undefined;
-  SettlementDetail: { settlementId: string };
-};
-
-// ─── Main Tab Navigator ───────────────────────────────────────────────────────
-
 export type MainTabParamList = {
-  Dashboard: undefined;
-  Friends: NavigatorScreenParams<FriendsStackParamList>;
-  Groups: NavigatorScreenParams<GroupsStackParamList>;
-  Settlements: NavigatorScreenParams<SettlementsStackParamList>;
-  Profile: undefined;
+  Home: undefined;
+  Friends: undefined;
+  Add: undefined; // placeholder — the center button opens the add sheet
+  Groups: undefined;
+  Activity: undefined;
 };
-
-// ─── Root Navigator ───────────────────────────────────────────────────────────
 
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
   Main: NavigatorScreenParams<MainTabParamList>;
-  // Expense flows are modal-style stacks accessible from anywhere
-  ExpenseFlow: NavigatorScreenParams<ExpensesStackParamList>;
+
+  // Friends & groups
+  FriendDetail: { friendId: string };
+  AddFriend: undefined;
+  FindFriends: undefined;
+  GroupDetail: { groupId: string };
+  CreateGroup: undefined;
+
+  // Expenses
+  ManualExpense: { groupId?: string; friendId?: string; draft?: QuickAddDraft } | undefined;
+  ExpenseDetail: { expenseId: string };
+  ReceiptScan: { groupId?: string; source?: 'camera' | 'gallery' | 'pdf' } | undefined;
+  ReceiptReview: { receiptId: string; groupId?: string };
+  QuickAdd: { groupId?: string } | undefined;
+
+  // Payments
+  SettleUp: { userId?: string; amount?: number; groupId?: string } | undefined;
+  Settlements: undefined;
+  SettlementDetail: { settlementId: string };
+
+  // Account & billing
+  Account: undefined;
+  Plans: { feature?: Feature } | undefined;
+  Insights: undefined;
 };
+
+export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<
+  RootStackParamList,
+  T
+>;
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace ReactNavigation {
+    // Gives useNavigation() full typing everywhere.
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+    interface RootParamList extends RootStackParamList {}
+  }
+}

@@ -1,63 +1,49 @@
-/**
- * Card component.
- * Consistent card surface with optional header, padding control, and press state.
- */
-
 import React from 'react';
-import {
-  View,
-  TouchableOpacity,
-  StyleSheet,
-  StyleProp,
-  ViewStyle,
-  TouchableOpacityProps,
-} from 'react-native';
-import { Colors, BorderRadius, Spacing, Shadows } from '../../theme';
+import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
+import { useTheme } from '../../theme';
 
 interface CardProps {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
-  padding?: keyof typeof Spacing | number;
-  shadow?: keyof typeof Shadows;
-  onPress?: TouchableOpacityProps['onPress'];
+  padding?: number;
+  onPress?: () => void;
+  variant?: 'surface' | 'alt' | 'outline';
+  accessibilityLabel?: string;
 }
 
-const Card: React.FC<CardProps> = ({
-  children,
-  style,
-  padding = 'base',
-  shadow = 'base',
-  onPress,
-}) => {
-  const paddingValue = typeof padding === 'number' ? padding : Spacing[padding];
-  const shadowStyle = Shadows[shadow];
-
+/**
+ * Rounded surface. Flat by design: white on the tinted page in light mode,
+ * a hairline border in dark mode. No shadows, so lists read as calm blocks.
+ */
+const Card: React.FC<CardProps> = ({ children, style, padding = 18, onPress, variant = 'surface', accessibilityLabel }) => {
+  const t = useTheme();
+  const base: ViewStyle = {
+    backgroundColor: variant === 'alt' ? t.colors.surfaceAlt : variant === 'outline' ? 'transparent' : t.colors.surface,
+    borderRadius: 20,
+    padding,
+    borderWidth: variant === 'outline' || (t.isDark && variant === 'surface') ? 1 : 0,
+    borderColor: t.colors.border,
+  };
   if (onPress) {
     return (
-      <TouchableOpacity
-        style={[styles.card, shadowStyle, { padding: paddingValue }, style]}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
         onPress={onPress}
-        activeOpacity={0.85}
+        style={({ pressed }) => [base, { opacity: pressed ? 0.85 : 1 }, style]}
       >
         {children}
-      </TouchableOpacity>
+      </Pressable>
     );
   }
-
-  return (
-    <View style={[styles.card, shadowStyle, { padding: paddingValue }, style]}>
-      {children}
-    </View>
-  );
+  return <View style={[base, style]}>{children}</View>;
 };
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#F4FEFC',
-    borderRadius: BorderRadius.lg,
-    marginBottom: Spacing.md,
-    overflow: 'hidden',
-  },
-});
+/** A card holding a list of rows: tighter vertical padding, rows supply their own. */
+export const ListCard: React.FC<{ children: React.ReactNode; style?: StyleProp<ViewStyle> }> = ({ children, style }) => (
+  <Card padding={0} style={[{ paddingHorizontal: 16, paddingVertical: 4 }, style]}>
+    {children}
+  </Card>
+);
 
 export default Card;

@@ -1,114 +1,99 @@
-/**
- * Screen wrapper component.
- * Provides safe area, standard background, scroll support, and consistent padding.
- */
-
 import React from 'react';
 import {
-  View,
-  ScrollView,
-  StyleSheet,
-  ViewStyle,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
+  ScrollView,
+  StyleProp,
+  View,
+  ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Spacing } from '../../theme';
+import { Edge, SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../../theme';
 
 interface ScreenProps {
   children: React.ReactNode;
-  scrollable?: boolean;
+  /** Scrollable content (default true). */
+  scroll?: boolean;
   padded?: boolean;
-  style?: ViewStyle;
-  contentStyle?: ViewStyle;
-  keyboardAvoid?: boolean;
+  /** Safe-area edges. Screens under a native header only need bottom. */
+  edges?: Edge[];
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** Sticky footer (e.g. the primary action), kept above the keyboard. */
+  footer?: React.ReactNode;
+  contentStyle?: StyleProp<ViewStyle>;
+  keyboard?: boolean;
 }
 
 const Screen: React.FC<ScreenProps> = ({
   children,
-  scrollable = false,
+  scroll = true,
   padded = true,
-  style,
-  contentStyle,
-  keyboardAvoid = false,
+  edges = ['bottom'],
   refreshing,
   onRefresh,
+  footer,
+  contentStyle,
+  keyboard = true,
 }) => {
-  const paddingStyle = padded ? { paddingHorizontal: Spacing.base } : {};
+  const t = useTheme();
+  const padding = padded ? { paddingHorizontal: t.spacing.gutter } : null;
 
-  const inner = scrollable ? (
+  const body = scroll ? (
     <ScrollView
-      contentContainerStyle={[styles.scrollContent, paddingStyle, contentStyle]}
-      showsVerticalScrollIndicator={false}
+      style={{ flex: 1 }}
+      contentContainerStyle={[{ flexGrow: 1, paddingTop: t.spacing.md, paddingBottom: t.spacing['4xl'] }, padding, contentStyle]}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      showsVerticalScrollIndicator={false}
       refreshControl={
         onRefresh ? (
-          <RefreshControl
-            refreshing={refreshing ?? false}
-            onRefresh={onRefresh}
-            tintColor={Colors.primary}
-          />
+          <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={t.colors.primary} colors={[t.colors.primary]} />
         ) : undefined
       }
     >
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.content, paddingStyle, contentStyle]}>{children}</View>
+    <View style={[{ flex: 1, paddingTop: t.spacing.sm }, padding, contentStyle]}>{children}</View>
   );
 
-  const wrapped = keyboardAvoid ? (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
-    >
-      {inner}
-    </KeyboardAvoidingView>
-  ) : (
-    inner
+  const inner = (
+    <>
+      {body}
+      {footer ? (
+        <View
+          style={{
+            paddingHorizontal: t.spacing.gutter,
+            paddingTop: t.spacing.md,
+            paddingBottom: t.spacing.sm,
+            borderTopWidth: 1,
+            borderTopColor: t.colors.border,
+            backgroundColor: t.colors.background,
+          }}
+        >
+          {footer}
+        </View>
+      ) : null}
+    </>
   );
 
   return (
-    <LinearGradient
-      colors={['#C5EAE3', '#D8F2EB', '#EEF8F5']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0.2, y: 1 }}
-      style={styles.gradient}
-    >
-      <SafeAreaView
-        style={[styles.safeArea, style]}
-        edges={['top', 'bottom']}
-      >
-        {wrapped}
-      </SafeAreaView>
-    </LinearGradient>
+    <SafeAreaView edges={edges} style={{ flex: 1, backgroundColor: t.colors.background }}>
+      {keyboard ? (
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+        >
+          {inner}
+        </KeyboardAvoidingView>
+      ) : (
+        inner
+      )}
+    </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  gradient: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  flex: { flex: 1 },
-  content: {
-    flex: 1,
-    paddingTop: Spacing.base,
-    paddingBottom: Spacing.base,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingTop: Spacing.base,
-    paddingBottom: Spacing['3xl'],
-  },
-});
 
 export default Screen;

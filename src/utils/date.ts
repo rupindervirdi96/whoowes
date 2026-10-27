@@ -23,20 +23,25 @@ function toDate(date: string | Date | number): Date {
 }
 
 /**
- * Smart relative date display:
- * - Today → "Today at 2:30 PM"
- * - Yesterday → "Yesterday at 8:00 AM"
- * - This week → "Mon at 3:00 PM"
- * - This year → "Jan 15"
- * - Older → "Jan 15, 2024"
+ * Short relative date for list rows (no time, so rows stay on one line):
+ * Today · Yesterday · Monday · Jan 15 · Jan 15, 2024
  */
 export function formatSmartDate(date: string | Date | number): string {
   const d = toDate(date);
-  if (isToday(d)) return `Today at ${format(d, 'h:mm a')}`;
-  if (isYesterday(d)) return `Yesterday at ${format(d, 'h:mm a')}`;
-  if (isThisWeek(d)) return format(d, "EEE 'at' h:mm a");
+  if (isToday(d)) return 'Today';
+  if (isYesterday(d)) return 'Yesterday';
+  if (isThisWeek(d)) return format(d, 'EEEE');
   if (isThisYear(d)) return format(d, 'MMM d');
   return format(d, 'MMM d, yyyy');
+}
+
+/** Date with time for detail screens: "Today at 2:30 PM", "Jan 15 at 9:00 AM". */
+export function formatDateTime(date: string | Date | number): string {
+  const d = toDate(date);
+  const time = format(d, 'h:mm a');
+  if (isToday(d)) return `Today at ${time}`;
+  if (isYesterday(d)) return `Yesterday at ${time}`;
+  return `${format(d, isThisYear(d) ? 'MMM d' : 'MMM d, yyyy')} at ${time}`;
 }
 
 /**

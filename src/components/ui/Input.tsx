@@ -1,138 +1,97 @@
-/**
- * TextInput component.
- * Controlled input with label, error state, helper text, left/right icons.
- */
-
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput as RNTextInput,
-  TextInputProps,
-  StyleSheet,
-  TouchableOpacity,
-} from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { Colors, BorderRadius, Typography, Spacing } from '../../theme';
+import React, { forwardRef, useState } from 'react';
+import { Pressable, TextInput, TextInputProps, View, StyleProp, ViewStyle, type TextInputInstance } from 'react-native';
+import { useTheme } from '../../theme';
+import Text from './Text';
+import Icon from './Icon';
 
 interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
-  helperText?: string;
-  leftIcon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
-  required?: boolean;
+  hint?: string;
+  icon?: string;
+  right?: React.ReactNode;
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
-const Input: React.FC<InputProps> = ({
-  label,
-  error,
-  helperText,
-  leftIcon,
-  rightIcon,
-  required,
-  secureTextEntry,
-  style,
-  ...rest
-}) => {
-  const [isFocused, setIsFocused] = useState(false);
-  const [isSecure, setIsSecure] = useState(secureTextEntry ?? false);
+const Input = forwardRef<TextInputInstance, InputProps>(
+  ({ label, error, hint, icon, right, secureTextEntry, containerStyle, style, multiline, ...rest }, ref) => {
+    const t = useTheme();
+    const [focused, setFocused] = useState(false);
+    const [hidden, setHidden] = useState(!!secureTextEntry);
+    const borderColor = error ? t.colors.negative : focused ? t.colors.primary : t.colors.border;
 
-  const borderColor = error
-    ? Colors.danger
-    : isFocused
-    ? Colors.primary
-    : Colors.border;
-
-  return (
-    <View style={styles.container}>
-      {label && (
-        <Text style={styles.label}>
-          {label}
-          {required && <Text style={styles.required}> *</Text>}
-        </Text>
-      )}
-      <View style={[styles.inputRow, { borderColor }]}>
-        {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
-        <RNTextInput
-          style={[styles.input, leftIcon ? styles.inputWithLeft : null, style]}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          secureTextEntry={isSecure}
-          placeholderTextColor={Colors.gray400}
-          {...rest}
-        />
-        {/* Password toggle */}
-        {secureTextEntry && (
-          <TouchableOpacity
-            style={styles.rightIcon}
-            onPress={() => setIsSecure((prev) => !prev)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <MaterialIcons
-              name={isSecure ? 'visibility-off' : 'visibility'}
-              size={20}
-              color={Colors.gray400}
-            />
-          </TouchableOpacity>
-        )}
-        {/* Custom right icon (not shown when secureTextEntry is active) */}
-        {!secureTextEntry && rightIcon && (
-          <View style={styles.rightIcon}>{rightIcon}</View>
-        )}
+    return (
+      <View style={[{ marginBottom: t.spacing.base }, containerStyle]}>
+        {label ? (
+          <Text variant="label" tone="secondary" style={{ marginBottom: 6 }}>
+            {label}
+          </Text>
+        ) : null}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: multiline ? 'flex-start' : 'center',
+            minHeight: multiline ? 96 : 52,
+            borderRadius: t.radius.md,
+            borderWidth: 1.5,
+            borderColor,
+            backgroundColor: t.colors.surface,
+            paddingHorizontal: 14,
+            gap: 10,
+          }}
+        >
+          {icon ? (
+            <Icon name={icon} size={20} color={focused ? t.colors.primary : t.colors.textTertiary} style={multiline ? { marginTop: 14 } : undefined} />
+          ) : null}
+          <TextInput
+            ref={ref}
+            placeholderTextColor={t.colors.textTertiary}
+            selectionColor={t.colors.primary}
+            secureTextEntry={hidden}
+            multiline={multiline}
+            onFocus={(e) => {
+              setFocused(true);
+              rest.onFocus?.(e);
+            }}
+            onBlur={(e) => {
+              setFocused(false);
+              rest.onBlur?.(e);
+            }}
+            style={[
+              {
+                flex: 1,
+                fontFamily: t.fonts.medium,
+                fontSize: 16,
+                color: t.colors.text,
+                paddingVertical: multiline ? 14 : 10,
+                textAlignVertical: multiline ? 'top' : 'center',
+              },
+              style,
+            ]}
+            {...rest}
+          />
+          {secureTextEntry ? (
+            <Pressable
+              onPress={() => setHidden((h) => !h)}
+              hitSlop={10}
+              accessibilityLabel={hidden ? 'Show password' : 'Hide password'}
+            >
+              <Icon name={hidden ? 'visibility-off' : 'visibility'} size={20} color={t.colors.textTertiary} />
+            </Pressable>
+          ) : (
+            right
+          )}
+        </View>
+        {error || hint ? (
+          <Text variant="caption" tone={error ? 'negative' : 'tertiary'} style={{ marginTop: 6 }}>
+            {error ?? hint}
+          </Text>
+        ) : null}
       </View>
-      {(error || helperText) && (
-        <Text style={error ? styles.errorText : styles.helperText}>
-          {error ?? helperText}
-        </Text>
-      )}
-    </View>
-  );
-};
+    );
+  },
+);
 
-const styles = StyleSheet.create({
-  container: { marginBottom: Spacing.base },
-  label: {
-    fontSize: Typography.sm,
-    fontWeight: Typography.semibold,
-    color: Colors.textPrimary,
-    marginBottom: 6,
-  },
-  required: { color: Colors.danger },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderRadius: BorderRadius.base,
-    backgroundColor: Colors.surface,
-    minHeight: 48,
-  },
-  input: {
-    flex: 1,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    fontSize: Typography.base,
-    color: Colors.textPrimary,
-  },
-  inputWithLeft: { paddingLeft: 4 },
-  leftIcon: {
-    paddingLeft: Spacing.md,
-    paddingRight: Spacing.xs,
-  },
-  rightIcon: {
-    paddingRight: Spacing.md,
-    paddingLeft: Spacing.xs,
-  },
-  errorText: {
-    marginTop: 4,
-    fontSize: Typography.xs,
-    color: Colors.danger,
-  },
-  helperText: {
-    marginTop: 4,
-    fontSize: Typography.xs,
-    color: Colors.textTertiary,
-  },
-});
+Input.displayName = 'Input';
 
 export default Input;

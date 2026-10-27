@@ -1,32 +1,67 @@
 {
   "expo": {
-    "name": "whoowes",
+    "name": "WhoOwes",
     "slug": "whoowes",
-    "version": "1.0.0",
+    "scheme": "whoowes",
+    "version": "2.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "WhoOwes uses the camera to scan receipts so you don't have to type every item.",
+        "NSPhotoLibraryUsageDescription": "WhoOwes reads receipt photos you choose so it can split them for you.",
+        "NSContactsUsageDescription": "WhoOwes checks your contacts to show which friends are already on WhoOwes. Numbers are hashed on your phone and never stored."
+      },
+      "bundleIdentifier": "com.whoowes.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#5B4CF5"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.whoowes.app",
+      "versionCode": 2,
+      "blockedPermissions": [
+        "android.permission.WRITE_CONTACTS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 140,
+          "resizeMode": "contain",
+          "backgroundColor": "#F6F5FB",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#0E0C1D"
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "WhoOwes uses the camera to scan receipts so you don't have to type every item.",
+          "photosPermission": "WhoOwes reads receipt photos you choose so it can split them for you."
+        }
+      ],
+      "expo-localization",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "WhoOwes checks your contacts to show which friends are already on WhoOwes. Numbers are hashed on your phone and never stored."
+        }
+      ],
+      "expo-status-bar"
     ]
   }
 }

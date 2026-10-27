@@ -1,85 +1,71 @@
 /**
  * UI Store (Zustand)
  *
- * Manages global UI state:
- * - Toast notifications
- * - Confirmation modals
- * - Global loading indicator
- * - Theme preference (light/dark)
+ * - Toasts and the global confirm modal
+ * - The "add expense" action sheet opened by the center tab button
+ * - Theme preference (persisted)
  */
 
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ToastMessage, ToastType, ModalState } from '../types';
 import { generateId } from '../utils/idGenerator';
-import { TOAST_DURATION } from '../constants';
+import { STORAGE_KEYS, TOAST_DURATION } from '../constants';
+
+export type ThemePreference = 'system' | 'light' | 'dark';
 
 interface UIStore {
-  // Toast
   toasts: ToastMessage[];
   showToast: (message: string, type?: ToastType, duration?: number) => string;
   dismissToast: (id: string) => void;
-  clearToasts: () => void;
 
-  // Modal
   modal: ModalState;
   showModal: (options: Omit<ModalState, 'visible'>) => void;
   hideModal: () => void;
 
-  // Global loading
-  globalLoading: boolean;
-  setGlobalLoading: (loading: boolean) => void;
+  addSheetOpen: boolean;
+  /** Group to pre-select when the add sheet is opened from a group screen. */
+  addSheetGroupId?: string;
+  openAddSheet: (groupId?: string) => void;
+  closeAddSheet: () => void;
 
-  // Theme
-  isDarkMode: boolean;
-  toggleDarkMode: () => void;
-  setDarkMode: (value: boolean) => void;
+  themePreference: ThemePreference;
+  setThemePreference: (pref: ThemePreference) => void;
 }
 
-export const useUIStore = create<UIStore>((set, get) => ({
-  // ── Toast ──────────────────────────────────────────────
-  toasts: [],
+export const useUIStore = create<UIStore>()(
+  persist(
+    (set, get) => ({
+      toasts: [],
+      showToast: (message, type = 'info', duration = TOAST_DURATION.MEDIUM) => {
+        const id = generateId();
+        set((s) => ({ toasts: [...s.toasts.slice(-2), { id, type, message, duration }] }));
+        setTimeout(() => get().dismissToast(id), duration);
+        return id;
+      },
+      dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
-  showToast: (message, type = 'info', duration = TOAST_DURATION.MEDIUM) => {
-    const id = generateId();
-    const toast: ToastMessage = { id, type, message, duration };
-    set((state) => ({ toasts: [...state.toasts, toast] }));
+      modal: { visible: false },
+      showModal: (options) => set({ modal: { ...options, visible: true } }),
+      hideModal: () => set({ modal: { visible: false } }),
 
-    // Auto-dismiss after duration
-    setTimeout(() => {
-      get().dismissToast(id);
-    }, duration);
+      addSheetOpen: false,
+      openAddSheet: (groupId) => set({ addSheetOpen: true, addSheetGroupId: groupId }),
+      closeAddSheet: () => set({ addSheetOpen: false, addSheetGroupId: undefined }),
 
-    return id;
-  },
+      themePreference: 'system',
+      setThemePreference: (themePreference) => set({ themePreference }),
+    }),
+    {
+      name: STORAGE_KEYS.UI_PREFS,
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (s) => ({ themePreference: s.themePreference }),
+    },
+  ),
+);
 
-  dismissToast: (id) =>
-    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
-
-  clearToasts: () => set({ toasts: [] }),
-
-  // ── Modal ──────────────────────────────────────────────
-  modal: { visible: false },
-
-  showModal: (options) =>
-    set({ modal: { ...options, visible: true } }),
-
-  hideModal: () =>
-    set({ modal: { visible: false } }),
-
-  // ── Loading ────────────────────────────────────────────
-  globalLoading: false,
-  setGlobalLoading: (loading) => set({ globalLoading: loading }),
-
-  // ── Theme ──────────────────────────────────────────────
-  isDarkMode: false,
-  toggleDarkMode: () => set((state) => ({ isDarkMode: !state.isDarkMode })),
-  setDarkMode: (value) => set({ isDarkMode: value }),
-}));
-
-// Convenience selector hooks
-export const useToasts = () => useUIStore((s) => s.toasts);
 export const useShowToast = () => useUIStore((s) => s.showToast);
-export const useModal = () => useUIStore((s) => s.modal);
 export const useShowModal = () => useUIStore((s) => s.showModal);
+export const useModal = () => useUIStore((s) => s.modal);
 export const useHideModal = () => useUIStore((s) => s.hideModal);
-export const useIsDarkMode = () => useUIStore((s) => s.isDarkMode);

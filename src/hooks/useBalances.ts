@@ -1,86 +1,83 @@
-/**
- * Balances hook.
- * Derives balance information from cached expenses and settlements.
- */
-
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { QUERY_KEYS } from '../constants';
 import { useAuthStore } from '../store/authStore';
-import { computeUserBalances, computeTotals, simplifyDebts } from '../utils/balanceEngine';
+import { computeUserBalances, computeTotals, computeGroupBalances } from '../utils/balanceEngine';
 import { ExpenseService, SettlementService } from '../services';
-import { User } from '../types';
-import { MOCK_USERS } from '../constants/sampleData';
+import { ActivityItem, Expense, Settlement, User } from '../types';
+import { useExpenses } from './useExpenses';
+import { useGroupSettlements, useSettlements } from './useSettlements';
+import { useGroup } from './useGroups';
 
-/**
- * Fetches all balance-related data and computes derived state.
- */
+/** Everyone referenced by these expenses and payments. */
+function peopleIn(expenses: Expense[], settlements: Settlement[]): User[] {
+  const map = new Map<string, User>();
+  for (const e of expenses) {
+    map.set(e.paidByUser.id, e.paidByUser);
+    e.splits.forEach((s) => map.set(s.user.id, s.user));
+  }
+  for (const s of settlements) {
+    map.set(s.fromUser.id, s.fromUser);
+    map.set(s.toUser.id, s.toUser);
+  }
+  return Array.from(map.values());
+}
+
+/** My balance with every person, plus overall totals. */
 export function useBalances() {
-  const currentUser = useAuthStore((s) => s.user);
-
+  const user = useAuthStore((s) => s.user);
   return useQuery({
-    queryKey: QUERY_KEYS.USER_BALANCES,
+    queryKey: QUERY_KEYS.BALANCES,
     queryFn: async () => {
-      if (!currentUser) return null;
-
-      // Fetch expenses and settlements in parallel
       const [expenses, settlements] = await Promise.all([
-        ExpenseService.getExpenses(currentUser.id),
-        SettlementService.getSettlements(currentUser.id),
+        ExpenseService.getExpenses(user!.id),
+        SettlementService.getSettlements(user!.id),
       ]);
-
-      // Build user map for balance engine
-      const userMap: Record<string, User> = {};
-      MOCK_USERS.forEach((u) => (userMap[u.id] = u));
-
-      const balances = computeUserBalances(
-        expenses,
-        settlements,
-        currentUser.id,
-        MOCK_USERS,
-      );
-
-      const totals = computeTotals(balances);
-      const simplifiedDebts = simplifyDebts(expenses, userMap);
-
-      return { balances, totals, simplifiedDebts };
+      const balances = computeUserBalances(expenses, settlements, user!.id, peopleIn(expenses, settlements));
+      return { balances, totals: computeTotals(balances) };
     },
-    enabled: !!currentUser,
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    enabled: !!user,
   });
 }
 
-/**
- * Dashboard summary - total owed and total owes.
- */
-export function useDashboardSummary() {
-  const currentUser = useAuthStore((s) => s.user);
+/** One person's net balance with me (+ they owe me, − I owe them). */
+export function useBalanceWith(userId: string) {
+  const { data } = useBalances();
+  return data?.balances.find((b) => b.userId === userId)?.netBalance ?? 0;
+}
 
-  return useQuery({
-    queryKey: QUERY_KEYS.DASHBOARD_SUMMARY,
-    queryFn: async () => {
-      if (!currentUser) return null;
+/** Each member's position in a group and the fewest payments that square it. */
+export function useGroupBalances(groupId: string) {
+  const { data: group } = useGroup(groupId);
+  const { data: expenses } = useExpenses(groupId);
+  const { data: settlements } = useGroupSettlements(groupId);
+  return useMemo(() => {
+    if (!group || !expenses || !settlements) return null;
+    return computeGroupBalances(expenses, settlements, group.members.map((m) => m.user));
+  }, [group, expenses, settlements]);
+}
 
-      const [expenses, settlements] = await Promise.all([
-        ExpenseService.getExpenses(currentUser.id),
-        SettlementService.getSettlements(currentUser.id),
-      ]);
+/** Expenses and payments merged into one newest-first timeline. */
+export function useActivity() {
+  const expensesQ = useExpenses();
+  const settlementsQ = useSettlements();
+  const items = useMemo<ActivityItem[]>(() => {
+    const list: ActivityItem[] = [
+      ...(expensesQ.data ?? []).map((e) => ({ kind: 'expense' as const, id: e.id, date: e.date, expense: e })),
+      ...(settlementsQ.data ?? []).map((s) => ({
+        kind: 'settlement' as const,
+        id: s.id,
+        date: s.updatedAt,
+        settlement: s,
+      })),
+    ];
+    return list.sort((a, b) => b.date.localeCompare(a.date));
+  }, [expensesQ.data, settlementsQ.data]);
 
-      const balances = computeUserBalances(
-        expenses,
-        settlements,
-        currentUser.id,
-        MOCK_USERS,
-      );
-
-      return {
-        ...computeTotals(balances),
-        recentExpenses: expenses.slice(0, 5),
-        pendingSettlementCount: settlements.filter(
-          (s) => s.toUserId === currentUser.id && s.status === 'pending',
-        ).length,
-      };
-    },
-    enabled: !!currentUser,
-    staleTime: 1000 * 60 * 2,
-  });
+  return {
+    items,
+    isLoading: expensesQ.isLoading || settlementsQ.isLoading,
+    isRefetching: expensesQ.isRefetching || settlementsQ.isRefetching,
+    refetch: () => Promise.all([expensesQ.refetch(), settlementsQ.refetch()]),
+  };
 }

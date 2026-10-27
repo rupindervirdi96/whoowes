@@ -1,163 +1,112 @@
-﻿/**
- * Create Group Screen
- */
-
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Switch,
-} from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { MaterialIcons } from '@expo/vector-icons';
-import { GroupsStackParamList } from '../../types/navigation';
+﻿import React, { useState } from 'react';
+import { View } from 'react-native';
+import { useTheme } from '../../theme';
+import { RootScreenProps } from '../../types/navigation';
 import { useCreateGroup } from '../../hooks/useGroups';
 import { useFriends } from '../../hooks/useFriends';
 import { useCurrentUser } from '../../hooks/useAuth';
 import { createGroupSchema } from '../../utils/validation';
-import { Colors, Typography, Spacing, BorderRadius } from '../../theme';
+import Screen from '../../components/ui/Screen';
 import Input from '../../components/ui/Input';
+import Text from '../../components/ui/Text';
 import Button from '../../components/ui/Button';
 import Avatar from '../../components/ui/Avatar';
-import Screen from '../../components/ui/Screen';
+import Chip from '../../components/ui/Chip';
+import EmptyState from '../../components/ui/EmptyState';
+import GroupTile from '../../components/GroupTile';
 
-type Props = NativeStackScreenProps<GroupsStackParamList, 'CreateGroup'>;
+const IDEAS = ['🏠 Home', '✈️ Trip', '🍕 Dinner club', '💼 Team lunch', '💍 Wedding'];
 
-const CreateGroupScreen: React.FC<Props> = ({ navigation }) => {
+const CreateGroupScreen: React.FC<RootScreenProps<'CreateGroup'>> = ({ navigation }) => {
+  const t = useTheme();
+  const me = useCurrentUser()!;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [errors, setErrors] = useState<{ name?: string; description?: string }>({});
-
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string>();
   const { data: friends = [] } = useFriends();
-  const user = useCurrentUser();
-  const { mutate: createGroup, isPending } = useCreateGroup();
+  const create = useCreateGroup();
 
-  const toggleFriend = (friendId: string) => {
-    setSelectedIds((prev) => {
+  const toggle = (id: string) =>
+    setSelected((prev) => {
       const next = new Set(prev);
-      next.has(friendId) ? next.delete(friendId) : next.add(friendId);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
+    });
+
+  const submit = () => {
+    const memberIds = [me.id, ...selected];
+    const result = createGroupSchema.safeParse({ name: name.trim(), description: description.trim() || undefined, memberIds });
+    if (!result.success) {
+      setError(result.error.issues[0]?.message);
+      return;
+    }
+    create.mutate(result.data, {
+      onSuccess: (g) => {
+        navigation.goBack();
+        navigation.navigate('GroupDetail', { groupId: g.id });
+      },
     });
   };
 
-  const handleSubmit = () => {
-    const result = createGroupSchema.safeParse({ name, description: description || undefined });
-    if (!result.success) {
-      const errs: typeof errors = {};
-      result.error.issues.forEach((i) => {
-        const f = i.path[0] as keyof typeof errors;
-        if (!errs[f]) errs[f] = i.message;
-      });
-      setErrors(errs);
-      return;
-    }
-
-    // build member list: current user + selected friends
-    const memberIds = [user!.id, ...Array.from(selectedIds)];
-
-    createGroup(
-      { name: result.data.name, description: result.data.description, memberIds },
-      { onSuccess: () => navigation.goBack() },
-    );
-  };
-
   return (
-    <Screen scrollable>
-      <View style={styles.container}>
-        <Input
-          label="Group Name"
-          value={name}
-          onChangeText={(v) => { setName(v); if (errors.name) setErrors((p) => ({ ...p, name: undefined })); }}
-          placeholder="e.g. Apartment 4B, Road Trip"
-          error={errors.name}
-          required
-          leftIcon={<MaterialIcons name="group" size={18} color={Colors.gray400} />}
-        />
-
-        <Input
-          label="Description (optional)"
-          value={description}
-          onChangeText={setDescription}
-          placeholder="What's this group for?"
-          multiline
-          numberOfLines={3}
-        />
-
-        {/* Member Selector */}
-        <Text style={styles.memberLabel}>Add Friends</Text>
-        <Text style={styles.memberHint}>
-          You'll be added automatically. Select friends to include.
-        </Text>
-
-        {/* Current user chip */}
-        <View style={styles.memberRow}>
-          <Avatar name={user?.name ?? 'Me'} size="sm" />
-          <Text style={styles.memberName}>{user?.name ?? 'Me'} (you)</Text>
-          <MaterialIcons name="check-circle" size={20} color={Colors.success} />
-        </View>
-
-        {friends.map((f) => (
-          <TouchableOpacity
-            key={f.id}
-            style={styles.memberRow}
-            onPress={() => toggleFriend(f.friendId)}
-          >
-            <Avatar name={f.friendUser.name} uri={f.friendUser?.avatarUrl} size="sm" />
-            <View style={styles.memberInfo}>
-              <Text style={styles.memberName}>{f.friendUser.name}</Text>
-              <Text style={styles.memberEmail}>{f.friendUser.email}</Text>
-            </View>
-            <MaterialIcons
-              name={selectedIds.has(f.friendId) ? 'check-circle' : 'radio-button-unchecked'}
-              size={22}
-              color={selectedIds.has(f.friendId) ? Colors.primary : Colors.gray300}
-            />
-          </TouchableOpacity>
-        ))}
-
+    <Screen
+      footer={
         <Button
-          title={`Create Group${selectedIds.size > 0 ? ` (${selectedIds.size + 1} members)` : ''}`}
-          onPress={handleSubmit}
-          loading={isPending}
-          fullWidth
+          title={selected.size ? `Create group · ${selected.size + 1} people` : 'Create group'}
           size="lg"
-          style={styles.createBtn}
+          fullWidth
+          loading={create.isPending}
+          disabled={!name.trim()}
+          onPress={submit}
         />
+      }
+    >
+      <View style={{ alignItems: 'center', marginVertical: t.spacing.base }}>
+        <GroupTile name={name || 'New group'} size={72} />
       </View>
+      <Input
+        label="Group name"
+        value={name}
+        onChangeText={(v) => {
+          setName(v);
+          setError(undefined);
+        }}
+        placeholder="e.g. Lisbon trip"
+        error={error}
+        autoFocus
+      />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: -6, marginBottom: t.spacing.base }}>
+        {IDEAS.map((idea) => (
+          <Chip key={idea} label={idea} onPress={() => setName(idea.replace(/^\S+\s/, ''))} />
+        ))}
+      </View>
+      <Input label="Description (optional)" value={description} onChangeText={setDescription} placeholder="What’s it for?" />
+
+      <Text variant="h3" style={{ marginTop: t.spacing.sm }}>
+        Who’s in?
+      </Text>
+      <Text variant="caption" tone="tertiary" style={{ marginBottom: 12 }}>
+        You’re added automatically. You can add more people later.
+      </Text>
+      {friends.length === 0 ? (
+        <EmptyState emoji="👋" title="No friends to add yet" body="Create the group now and invite people later." />
+      ) : (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {friends.map((f) => (
+            <Chip
+              key={f.id}
+              label={f.friendUser.name.split(' ')[0]}
+              selected={selected.has(f.friendId)}
+              onPress={() => toggle(f.friendId)}
+              leading={<Avatar name={f.friendUser.name} size="xs" />}
+            />
+          ))}
+        </View>
+      )}
     </Screen>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { padding: Spacing.base, gap: Spacing.sm },
-  memberLabel: {
-    fontSize: Typography.sm,
-    fontWeight: Typography.semibold,
-    color: Colors.textPrimary,
-    marginTop: Spacing.sm,
-  },
-  memberHint: {
-    fontSize: Typography.xs,
-    color: Colors.textTertiary,
-    marginBottom: Spacing.xs,
-  },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    gap: Spacing.sm,
-  },
-  memberInfo: { flex: 1 },
-  memberName: { fontSize: Typography.sm, fontWeight: Typography.medium, color: Colors.textPrimary, flex: 1 },
-  memberEmail: { fontSize: Typography.xs, color: Colors.textTertiary },
-  createBtn: { marginTop: Spacing.xl },
-});
-
 export default CreateGroupScreen;
-

@@ -1,62 +1,52 @@
-/**
- * Confirm Modal component.
- * Controlled by UIStore — call showModal() from anywhere in the app.
- */
-
 import React from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Pressable,
-} from 'react-native';
-import { useModal, useHideModal } from '../../store/uiStore';
-import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../theme';
+import { Modal, Pressable, View } from 'react-native';
+import { useHideModal, useModal } from '../../store/uiStore';
+import { useTheme } from '../../theme';
+import Text from './Text';
 import Button from './Button';
 
+/** Global confirm dialog — open it from anywhere with useShowModal(). */
 const ConfirmModal: React.FC = () => {
+  const t = useTheme();
   const modal = useModal();
   const hideModal = useHideModal();
 
-  const handleConfirm = () => {
-    modal.onConfirm?.();
-    hideModal();
-  };
-
-  const handleCancel = () => {
+  const cancel = () => {
     modal.onCancel?.();
     hideModal();
   };
+  const confirm = () => {
+    hideModal();
+    modal.onConfirm?.();
+  };
 
   return (
-    <Modal
-      visible={modal.visible}
-      transparent
-      animationType="fade"
-      onRequestClose={handleCancel}
-    >
-      <Pressable style={styles.overlay} onPress={handleCancel}>
-        <Pressable style={styles.sheet}>
-          {modal.title && (
-            <Text style={styles.title}>{modal.title}</Text>
-          )}
-          {modal.body && (
-            <Text style={styles.body}>{modal.body}</Text>
-          )}
-          <View style={styles.actions}>
-            <Button
-              title={modal.cancelLabel ?? 'Cancel'}
-              variant="ghost"
-              onPress={handleCancel}
-              style={styles.btn}
-            />
+    <Modal visible={modal.visible} transparent animationType="fade" onRequestClose={cancel} statusBarTranslucent>
+      <Pressable
+        onPress={cancel}
+        style={{ flex: 1, backgroundColor: t.colors.overlay, justifyContent: 'center', padding: 24 }}
+      >
+        <Pressable
+          style={{
+            backgroundColor: t.colors.surface,
+            borderRadius: t.radius.xl,
+            padding: 24,
+            ...(t.elevation(3) as object),
+          }}
+        >
+          {modal.title ? <Text variant="h2">{modal.title}</Text> : null}
+          {modal.body ? (
+            <Text tone="secondary" style={{ marginTop: 8 }}>
+              {modal.body}
+            </Text>
+          ) : null}
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 24 }}>
+            <Button title={modal.cancelLabel ?? 'Cancel'} variant="secondary" onPress={cancel} style={{ flex: 1 }} />
             <Button
               title={modal.confirmLabel ?? 'Confirm'}
               variant={modal.variant === 'danger' ? 'danger' : 'primary'}
-              onPress={handleConfirm}
-              style={styles.btn}
+              onPress={confirm}
+              style={{ flex: 1 }}
             />
           </View>
         </Pressable>
@@ -64,44 +54,5 @@ const ConfirmModal: React.FC = () => {
     </Modal>
   );
 };
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.base,
-  },
-  sheet: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
-    width: '100%',
-    maxWidth: 380,
-    ...Shadows.lg,
-  } as object,
-  title: {
-    fontSize: Typography.lg,
-    fontWeight: Typography.bold,
-    color: Colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: Spacing.sm,
-  },
-  body: {
-    fontSize: Typography.base,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: Spacing.xl,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  btn: {
-    flex: 1,
-  },
-});
 
 export default ConfirmModal;

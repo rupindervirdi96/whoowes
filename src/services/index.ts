@@ -1,12 +1,22 @@
 /**
- * Services barrel export.
- * When switching to a real backend, replace mock imports with real API services
- * that use apiClient from ./api/apiClient.ts.
+ * Services barrel.
+ *
+ * With EXPO_PUBLIC_API_URL set, everything talks to the WhoOwes server
+ * (phone sign-in, friends, groups, expenses, payments, receipts, billing, AI).
+ * Without it, the app runs on the in-memory demo data in services/mock/*.
  */
 
-export { default as AuthService } from './mock/authService';
-export { default as FriendService } from './mock/friendService';
-export { default as GroupService } from './mock/groupService';
-export { default as ExpenseService } from './mock/expenseService';
-export { default as ReceiptService } from './mock/receiptService';
-export { default as SettlementService } from './mock/settlementService';
+export {
+  AuthService,
+  FriendService,
+  GroupService,
+  ExpenseService,
+  ReceiptService,
+  SettlementService,
+  ReminderService,
+} from './impl';
+export { BillingService } from './billing';
+export { AIService } from './ai';
+export type { ReceiptFile, QuickAddContext, MonthStats } from './ai';
+export { ContactsService } from './contacts';
+export { PhoneAuthService, DEMO_CODE } from './phoneAuth';

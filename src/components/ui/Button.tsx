@@ -1,122 +1,104 @@
-/**
- * Button component.
- * Supports primary, secondary, outline, ghost, danger variants.
- * Handles loading state, disabled state, icon support.
- */
-
 import React from 'react';
-import {
-  TouchableOpacity,
-  Text,
-  ActivityIndicator,
-  StyleSheet,
-  View,
-  TouchableOpacityProps,
-} from 'react-native';
-import { Colors, BorderRadius, Typography, Spacing } from '../../theme';
+import { ActivityIndicator, Pressable, PressableProps, StyleProp, View, ViewStyle } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { useTheme } from '../../theme';
+import Text from './Text';
+import Icon from './Icon';
 
-type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'accent' | 'pro';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
-interface ButtonProps extends TouchableOpacityProps {
+interface ButtonProps extends Omit<PressableProps, 'style' | 'children'> {
   title: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
   loading?: boolean;
-  leftIcon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
+  icon?: string;
+  iconRight?: string;
   fullWidth?: boolean;
+  haptic?: boolean;
+  style?: StyleProp<ViewStyle>;
 }
+
+const SIZES: Record<ButtonSize, { height: number; px: number; icon: number; variant: 'label' | 'bodyStrong' | 'bodyLg' }> = {
+  sm: { height: 36, px: 14, icon: 16, variant: 'label' },
+  md: { height: 48, px: 18, icon: 18, variant: 'bodyStrong' },
+  lg: { height: 56, px: 22, icon: 20, variant: 'bodyLg' },
+};
 
 const Button: React.FC<ButtonProps> = ({
   title,
   variant = 'primary',
   size = 'md',
   loading = false,
-  leftIcon,
-  rightIcon,
-  fullWidth = false,
+  icon,
+  iconRight,
+  fullWidth,
+  haptic,
   disabled,
   style,
+  onPress,
   ...rest
 }) => {
+  const t = useTheme();
+  const c = t.colors;
+  const s = SIZES[size];
   const isDisabled = disabled || loading;
 
+  const palette: Record<ButtonVariant, { bg: string; fg: string; border?: string; pressed: string }> = {
+    primary: { bg: c.primary, fg: c.textOnPrimary, pressed: c.primaryPressed },
+    secondary: { bg: c.surfaceAlt, fg: c.text, pressed: c.border },
+    outline: { bg: 'transparent', fg: c.text, border: c.borderStrong, pressed: c.surfaceAlt },
+    ghost: { bg: 'transparent', fg: c.primary, pressed: c.primarySoft },
+    danger: { bg: c.negativeSoft, fg: c.negative, pressed: c.negativeSoft },
+    accent: { bg: c.accent, fg: c.textOnAccent, pressed: c.accent },
+    pro: { bg: c.pro, fg: t.isDark ? '#1A1405' : '#FFFFFF', pressed: c.pro },
+  };
+  const v = palette[variant];
+
   return (
-    <TouchableOpacity
-      style={[
-        styles.base,
-        styles[`size_${size}`],
-        styles[`variant_${variant}`],
-        isDisabled && styles.disabled,
-        fullWidth && styles.fullWidth,
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!isDisabled, busy: loading }}
+      disabled={isDisabled}
+      onPress={(e) => {
+        if (haptic || variant === 'primary' || variant === 'pro') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        }
+        onPress?.(e);
+      }}
+      style={({ pressed }) => [
+        {
+          height: s.height,
+          paddingHorizontal: s.px,
+          borderRadius: size === 'sm' ? t.radius.sm : t.radius.md,
+          backgroundColor: pressed ? v.pressed : v.bg,
+          borderWidth: v.border ? 1.5 : 0,
+          borderColor: v.border,
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'row',
+          alignSelf: fullWidth ? 'stretch' : 'auto',
+          opacity: isDisabled && !loading ? 0.45 : 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
+        },
         style,
       ]}
-      disabled={isDisabled}
-      activeOpacity={0.75}
       {...rest}
     >
       {loading ? (
-        <ActivityIndicator
-          size="small"
-          color={variant === 'outline' || variant === 'ghost' ? Colors.primary : Colors.white}
-        />
+        <ActivityIndicator color={v.fg} />
       ) : (
-        <View style={styles.content}>
-          {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
-          <Text style={[styles.label, styles[`label_${variant}`], styles[`labelSize_${size}`]]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {icon ? <Icon name={icon} size={s.icon} color={v.fg} /> : null}
+          <Text variant={s.variant} weight="bold" color={v.fg} numberOfLines={1}>
             {title}
           </Text>
-          {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
+          {iconRight ? <Icon name={iconRight} size={s.icon} color={v.fg} /> : null}
         </View>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 };
-
-const styles = StyleSheet.create({
-  base: {
-    borderRadius: BorderRadius.base,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  fullWidth: {
-    width: '100%',
-  },
-  content: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconLeft: { marginRight: Spacing.sm },
-  iconRight: { marginLeft: Spacing.sm },
-
-  // Sizes
-  size_sm: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs },
-  size_md: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md },
-  size_lg: { paddingHorizontal: Spacing.xl, paddingVertical: Spacing.base + 2 },
-
-  // Variants
-  variant_primary: { backgroundColor: Colors.primary },
-  variant_secondary: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
-  variant_outline: { backgroundColor: 'transparent', borderWidth: 2, borderColor: Colors.primary },
-  variant_ghost: { backgroundColor: 'transparent' },
-  variant_danger: { backgroundColor: Colors.danger },
-
-  // Disabled
-  disabled: { opacity: 0.5 },
-
-  // Labels
-  label: { fontWeight: Typography.semibold },
-  label_primary: { color: Colors.white },
-  label_secondary: { color: Colors.textPrimary },
-  label_outline: { color: Colors.primary },
-  label_ghost: { color: Colors.primary },
-  label_danger: { color: Colors.white },
-  labelSize_sm: { fontSize: Typography.sm },
-  labelSize_md: { fontSize: Typography.base },
-  labelSize_lg: { fontSize: Typography.md },
-});
 
 export default Button;

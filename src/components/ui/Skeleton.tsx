@@ -1,85 +1,48 @@
-/**
- * Loading skeleton component.
- * Animated placeholder for content that is being loaded.
- */
-
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet, ViewStyle } from 'react-native';
-import { Colors, BorderRadius } from '../../theme';
+import { Animated, DimensionValue, StyleProp, View, ViewStyle } from 'react-native';
+import { useTheme } from '../../theme';
 
 interface SkeletonProps {
-  width?: number | `${number}%`;
+  width?: DimensionValue;
   height?: number;
-  borderRadius?: number;
-  style?: ViewStyle;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
 }
 
-const Skeleton: React.FC<SkeletonProps> = ({
-  width = '100%',
-  height = 16,
-  borderRadius = BorderRadius.md,
-  style,
-}) => {
-  const opacity = useRef(new Animated.Value(0.4)).current;
-
+const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 14, radius = 8, style }) => {
+  const t = useTheme();
+  const opacity = useRef(new Animated.Value(0.5)).current;
   useEffect(() => {
-    const animation = Animated.loop(
+    const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 700,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0.4,
-          duration: 700,
-          useNativeDriver: true,
-        }),
+        Animated.timing(opacity, { toValue: 1, duration: 650, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.5, duration: 650, useNativeDriver: true }),
       ]),
     );
-    animation.start();
-    return () => animation.stop();
+    loop.start();
+    return () => loop.stop();
   }, [opacity]);
-
   return (
     <Animated.View
-      style={[
-        styles.skeleton,
-        { width, height, borderRadius, opacity },
-        style,
-      ]}
+      style={[{ width, height, borderRadius: radius, backgroundColor: t.colors.surfaceAlt, opacity }, style]}
     />
   );
 };
 
-// Preset skeleton layouts for common UI patterns
-export const SkeletonCard: React.FC = () => (
-  <View style={skStyles.card}>
-    <View style={skStyles.header}>
-      <Skeleton width={40} height={40} borderRadius={20} />
-      <View style={skStyles.headerText}>
-        <Skeleton width="60%" height={14} style={{ marginBottom: 8 }} />
-        <Skeleton width="40%" height={12} />
+/** Placeholder for a list of rows while data loads. */
+export const SkeletonList: React.FC<{ rows?: number }> = ({ rows = 4 }) => (
+  <View style={{ gap: 18, paddingVertical: 12 }}>
+    {Array.from({ length: rows }).map((_, i) => (
+      <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Skeleton width={44} height={44} radius={14} />
+        <View style={{ flex: 1, gap: 8 }}>
+          <Skeleton width="60%" />
+          <Skeleton width="35%" height={10} />
+        </View>
+        <Skeleton width={56} height={14} />
       </View>
-    </View>
-    <Skeleton width="100%" height={12} style={{ marginTop: 12, marginBottom: 6 }} />
-    <Skeleton width="80%" height={12} />
+    ))}
   </View>
 );
-
-const styles = StyleSheet.create({
-  skeleton: { backgroundColor: Colors.gray200 },
-});
-
-const skStyles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    padding: 16,
-    marginBottom: 12,
-  },
-  header: { flexDirection: 'row', alignItems: 'center' },
-  headerText: { flex: 1, marginLeft: 12 },
-});
 
 export default Skeleton;

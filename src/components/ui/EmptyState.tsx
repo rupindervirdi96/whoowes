@@ -1,78 +1,48 @@
-/**
- * Empty state component.
- * Shown when a list has no data to display.
- */
-
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing } from '../../theme';
+import { StyleProp, View, ViewStyle } from 'react-native';
+import { useTheme } from '../../theme';
+import Text from './Text';
 import Button from './Button';
 
 interface EmptyStateProps {
-  icon?: keyof typeof MaterialIcons.glyphMap;
+  emoji?: string;
   title: string;
-  description?: string;
+  body?: string;
   actionLabel?: string;
   onAction?: () => void;
+  style?: StyleProp<ViewStyle>;
 }
 
-const EmptyState: React.FC<EmptyStateProps> = ({
-  icon = 'inbox',
-  title,
-  description,
-  actionLabel,
-  onAction,
-}) => (
-  <View style={styles.container}>
-    <View style={styles.iconWrapper}>
-      <MaterialIcons name={icon} size={52} color={Colors.gray300} />
+const EmptyState: React.FC<EmptyStateProps> = ({ emoji = '🦉', title, body, actionLabel, onAction, style }) => {
+  const t = useTheme();
+  return (
+    <View style={[{ alignItems: 'center', paddingVertical: t.spacing['2xl'], paddingHorizontal: t.spacing.xl }, style]}>
+      <View
+        style={{
+          width: 76,
+          height: 76,
+          borderRadius: 38,
+          backgroundColor: t.colors.primarySoft,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: t.spacing.base,
+        }}
+      >
+        <Text style={{ fontSize: 34, lineHeight: 40 }}>{emoji}</Text>
+      </View>
+      <Text variant="h3" align="center">
+        {title}
+      </Text>
+      {body ? (
+        <Text tone="secondary" align="center" style={{ marginTop: 6, maxWidth: 300 }}>
+          {body}
+        </Text>
+      ) : null}
+      {actionLabel && onAction ? (
+        <Button title={actionLabel} onPress={onAction} size="sm" style={{ marginTop: t.spacing.base }} />
+      ) : null}
     </View>
-    <Text style={styles.title}>{title}</Text>
-    {description && <Text style={styles.description}>{description}</Text>}
-    {actionLabel && onAction && (
-      <Button
-        title={actionLabel}
-        onPress={onAction}
-        variant="outline"
-        size="sm"
-        style={styles.button}
-      />
-    )}
-  </View>
-);
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing['3xl'],
-  },
-  iconWrapper: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: Colors.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.base,
-  },
-  title: {
-    fontSize: Typography.md,
-    fontWeight: Typography.semibold,
-    color: Colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: Spacing.sm,
-  },
-  description: {
-    fontSize: Typography.sm,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: Spacing.base,
-  },
-  button: { marginTop: Spacing.sm },
-});
+  );
+};
 
 export default EmptyState;

@@ -1,128 +1,107 @@
-﻿/**
- * Add Friend Screen â€” search users and send friend requests
- */
-
-import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-} from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { MaterialIcons } from '@expo/vector-icons';
-import { FriendsStackParamList } from '../../types/navigation';
-import { useAddFriend, useSearchUsers } from '../../hooks/useFriends';
-import { Colors, Typography, Spacing, BorderRadius } from '../../theme';
+﻿import React, { useState } from 'react';
+import { Share, View } from 'react-native';
+import { useTheme } from '../../theme';
+import { RootScreenProps } from '../../types/navigation';
+import { useAddFriend, useFriends, useSearchUsers } from '../../hooks/useFriends';
+import { addFriendSchema } from '../../utils/validation';
+import Screen from '../../components/ui/Screen';
+import Input from '../../components/ui/Input';
+import Text from '../../components/ui/Text';
 import Avatar from '../../components/ui/Avatar';
 import Button from '../../components/ui/Button';
-import Input from '../../components/ui/Input';
+import Card from '../../components/ui/Card';
+import ListRow from '../../components/ui/ListRow';
+import Badge from '../../components/ui/Badge';
+import { SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
-import Screen from '../../components/ui/Screen';
 
-type Props = NativeStackScreenProps<FriendsStackParamList, 'AddFriend'>;
-
-const AddFriendScreen: React.FC<Props> = ({ navigation }) => {
+const AddFriendScreen: React.FC<RootScreenProps<'AddFriend'>> = () => {
+  const t = useTheme();
   const [query, setQuery] = useState('');
-  const [sentEmails, setSentIds] = useState<Set<string>>(new Set());
+  const [sent, setSent] = useState<Set<string>>(new Set());
+  const { data: results = [], isFetching } = useSearchUsers(query);
+  const { data: friends = [] } = useFriends();
+  const add = useAddFriend();
 
-  const { data: results = [], isLoading: searching } = useSearchUsers(query);
-  const { mutate: addFriend, isPending: adding } = useAddFriend();
+  const looksLikeContact = addFriendSchema.safeParse({ emailOrPhone: query.trim() }).success;
+  const friendIds = new Set(friends.map((f) => f.friendId));
 
-  const handleAdd = (userEmail: string) => {
-    addFriend({ emailOrPhone: userEmail }, {
-      onSuccess: () => setSentIds((prev) => new Set(prev).add(userEmail)),
-    });
-  };
+  const send = (payload: { userId?: string; emailOrPhone?: string }, key: string) =>
+    add.mutate(payload, { onSuccess: () => setSent((s) => new Set(s).add(key)) });
 
   return (
-    <Screen scrollable={false}>
-      <View style={styles.container}>
-        <Text style={styles.hint}>
-          Search by name, email, or phone number to find friends.
-        </Text>
+    <Screen>
+      <Input
+        icon="search"
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Name, email or phone"
+        autoFocus
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
 
-        <Input
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search users..."
-          autoFocus
-          leftIcon={<MaterialIcons name="search" size={18} color={Colors.gray400} />}
-          rightIcon={
-            query.length > 0 ? (
-              <TouchableOpacity onPress={() => setQuery('')}>
-                <MaterialIcons name="close" size={16} color={Colors.gray400} />
-              </TouchableOpacity>
-            ) : undefined
-          }
-        />
-
-        {query.length < 2 ? (
-          <EmptyState
-            icon="person-search"
-            title="Find friends"
-            description="Enter at least 2 characters to search"
-          />
-        ) : results.length === 0 && !searching ? (
-          <EmptyState
-            icon="search-off"
-            title="No users found"
-            description={`No one matches "${query}"`}
-          />
-        ) : (
-          <FlatList
-            data={results}
-            keyExtractor={(item) => item.id}
-            style={styles.list}
-            renderItem={({ item }) => {
-              const sent = sentEmails.has(item.email);
-              return (
-                <View style={styles.resultRow}>
-                  <Avatar name={item.name} uri={item.avatarUrl} size="md" />
-                  <View style={styles.info}>
-                    <Text style={styles.name}>{item.name}</Text>
-                    <Text style={styles.email}>{item.email}</Text>
-                  </View>
-                  <Button
-                    title={sent ? 'Sent' : 'Add'}
-                    size="sm"
-                    variant={sent ? 'secondary' : 'primary'}
-                    disabled={sent}
-                    loading={adding}
-                    onPress={() => handleAdd(item.email)}
-                  />
-                </View>
-              );
-            }}
-          />
-        )}
-      </View>
+      {query.trim().length < 2 ? (
+        <>
+          <EmptyState emoji="🤝" title="Find your people" body="Search by phone number or email. Names find people you already share a group with." />
+          <Card variant="alt" style={{ marginTop: t.spacing.base }}>
+            <Text variant="bodyStrong">Not on WhoOwes yet?</Text>
+            <Text tone="secondary" style={{ marginTop: 4 }}>
+              Send them an invite — you can start splitting as soon as they join.
+            </Text>
+            <Button
+              title="Share invite link"
+              icon="ios-share"
+              variant="secondary"
+              style={{ marginTop: 12 }}
+              onPress={() =>
+                Share.share({ message: 'Join me on WhoOwes so we can split bills without the awkward math 🦉 https://whoowes.app' })
+              }
+            />
+          </Card>
+        </>
+      ) : isFetching && results.length === 0 ? (
+        <SkeletonList rows={3} />
+      ) : results.length === 0 ? (
+        <View>
+          <EmptyState emoji="🔍" title="No one found" body={`Nobody matches “${query}”.`} />
+          {looksLikeContact ? (
+            <Button title={`Send request to ${query.trim()}`} onPress={() => send({ emailOrPhone: query.trim() }, query.trim())} loading={add.isPending} fullWidth />
+          ) : null}
+        </View>
+      ) : (
+        <Card padding={4} style={{ paddingHorizontal: 12 }}>
+          {results.map((u, i) => {
+            const already = friendIds.has(u.id);
+            const isSent = sent.has(u.id);
+            return (
+              <ListRow
+                key={u.id}
+                divider={i < results.length - 1}
+                leading={<Avatar name={u.name} uri={u.avatarUrl} />}
+                title={u.name}
+                subtitle={u.email || undefined}
+                trailing={
+                  already ? (
+                    <Badge label="Friends" tone="positive" icon="check" />
+                  ) : (
+                    <Button
+                      title={isSent ? 'Sent' : 'Add'}
+                      size="sm"
+                      variant={isSent ? 'secondary' : 'primary'}
+                      disabled={isSent}
+                      loading={add.isPending && add.variables?.userId === u.id}
+                      onPress={() => send({ userId: u.id }, u.id)}
+                    />
+                  )
+                }
+              />
+            );
+          })}
+        </Card>
+      )}
     </Screen>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { padding: Spacing.base, flex: 1 },
-  hint: {
-    fontSize: Typography.sm,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.base,
-    lineHeight: 20,
-  },
-  list: { marginTop: Spacing.sm },
-  resultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    gap: Spacing.sm,
-  },
-  info: { flex: 1 },
-  name: { fontSize: Typography.sm, fontWeight: Typography.medium, color: Colors.textPrimary },
-  email: { fontSize: Typography.xs, color: Colors.textTertiary, marginTop: 1 },
-});
-
 export default AddFriendScreen;
-
