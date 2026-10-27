@@ -72,10 +72,17 @@ aiRouter.post('/receipts/parse', gate('receipt_scan'), async (req, res, next) =>
     await recordScan(req.user!.id); // count only successful reads
     // Keep the parsed result so the review screen can reload it and the expense can link to it.
     const receiptId = randomUUID();
-    await db.query(
-      'insert into receipts (id, user_id, source_type, file_name, mime_type, parsed_data, ai_prompt) values ($1, $2, $3, $4, $5, $6, $7)',
-      [receiptId, req.user!.id, body.sourceType, body.fileName ?? null, body.file.mediaType, JSON.stringify(receipt), body.instructions ?? null],
-    );
+    await db.receipts.insertOne({
+      _id: receiptId,
+      userId: req.user!.id,
+      sourceType: body.sourceType,
+      fileName: body.fileName ?? null,
+      mimeType: body.file.mediaType,
+      parsedData: receipt,
+      aiPrompt: body.instructions ?? null,
+      expenseId: null,
+      createdAt: new Date(),
+    });
     res.json({ ...receipt, receiptId });
   } catch (err) {
     next(err);

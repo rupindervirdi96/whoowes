@@ -4,7 +4,7 @@
  */
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { db, type Queryable } from '../db/index.js';
+import { db, type UserDoc } from '../db/index.js';
 
 /** Throw from a route; the error handler turns it into JSON. */
 export function fail(status: number, message: string, code?: string): never {
@@ -22,39 +22,34 @@ export const toCents = (amount: number) => Math.round(amount * 100);
 export const toAmount = (cents: number) => Math.round(cents) / 100;
 export const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : undefined);
 
+/** One key per pair of people, whichever way round they are given. */
+export const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+/** Escapes text for use inside a regular expression. */
+export const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // ─── Users ───────────────────────────────────────────────────────────────────
 
-export interface UserRow {
-  id: string;
-  phone: string;
-  name: string;
-  email: string | null;
-  avatar_url: string | null;
-  created_at: Date;
-  updated_at: Date;
-}
-
 /** What the app sees about a person. Phone and email are only shown to their owner. */
-export function publicUser(u: UserRow, viewerId: string) {
-  const self = u.id === viewerId;
+export function publicUser(u: UserDoc, viewerId: string) {
+  const self = u._id === viewerId;
   return {
-    id: u.id,
+    id: u._id,
     name: u.name,
     email: self ? (u.email ?? '') : '',
     phone: self ? u.phone : undefined,
-    avatarUrl: u.avatar_url ?? undefined,
-    createdAt: iso(u.created_at)!,
-    updatedAt: iso(u.updated_at)!,
+    avatarUrl: u.avatarUrl ?? undefined,
+    createdAt: iso(u.createdAt)!,
+    updatedAt: iso(u.updatedAt)!,
   };
 }
 export type PublicUser = ReturnType<typeof publicUser>;
 
-export async function usersById(ids: Iterable<string>, viewerId: string, q: Queryable = db) {
+export async function usersById(ids: Iterable<string>, viewerId: string) {
   const list = [...new Set(ids)];
   const map = new Map<string, PublicUser>();
   if (list.length === 0) return map;
-  const { rows } = await q.query<UserRow>('select * from users where id = any($1::text[])', [list]);
-  for (const r of rows) map.set(r.id, publicUser(r, viewerId));
+  for (const u of await db.users.find({ _id: { $in: list } }).toArray()) map.set(u._id, publicUser(u, viewerId));
   return map;
 }
 
@@ -70,31 +65,25 @@ export const deletedUser = (id: string): PublicUser => ({
 
 // ─── Relationships ───────────────────────────────────────────────────────────
 
-export async function areFriends(a: string, b: string, q: Queryable = db) {
-  return !!(await q
-    .query(
-      `select 1 from friendships where status = 'accepted'
-       and ((requester_id = $1 and addressee_id = $2) or (requester_id = $2 and addressee_id = $1))`,
-      [a, b],
-    )
-    .then((r) => r.rows[0]));
+export async function areFriends(a: string, b: string) {
+  return !!(await db.friendships.findOne({ pair: pairKey(a, b), status: 'accepted' }, { projection: { _id: 1 } }));
 }
 
-export async function isGroupMember(groupId: string, userId: string, q: Queryable = db) {
-  return !!(await q.query('select 1 from group_members where group_id = $1 and user_id = $2', [groupId, userId]).then((r) => r.rows[0]));
+export async function isGroupMember(groupId: string, userId: string) {
+  return !!(await db.groups.findOne({ _id: groupId, 'members.userId': userId }, { projection: { _id: 1 } }));
 }
 
-export async function shareAGroup(a: string, b: string, q: Queryable = db) {
-  return !!(await q
-    .query(
-      'select 1 from group_members x join group_members y on x.group_id = y.group_id where x.user_id = $1 and y.user_id = $2 limit 1',
-      [a, b],
-    )
-    .then((r) => r.rows[0]));
+/** Ids of the groups I'm in. */
+export async function myGroupIds(userId: string) {
+  return (await db.groups.find({ 'members.userId': userId }, { projection: { _id: 1 } }).toArray()).map((g) => g._id);
+}
+
+export async function shareAGroup(a: string, b: string) {
+  return !!(await db.groups.findOne({ 'members.userId': { $all: [a, b] } }, { projection: { _id: 1 } }));
 }
 
 /** People I can split with or pay: friends, or anyone I share a group with. */
-export async function canTransactWith(me: string, other: string, q: Queryable = db) {
+export async function canTransactWith(me: string, other: string) {
   if (me === other) return true;
-  return (await areFriends(me, other, q)) || (await shareAGroup(me, other, q));
+  return (await areFriends(me, other)) || (await shareAGroup(me, other));
 }

@@ -65,12 +65,9 @@ export async function requireUser(req: Request, res: Response, next: NextFunctio
     const token = req.header('authorization')?.replace(/^Bearer\s+/i, '');
     const userId = token ? verifySession(token) : null;
     if (!userId) return unauthorized(res);
-    const user = await db.one<{ id: string; name: string; email: string | null; phone: string }>(
-      'select id, name, email, phone from users where id = $1',
-      [userId],
-    );
+    const user = await db.users.findOne({ _id: userId }, { projection: { name: 1, email: 1, phone: 1 } });
     if (!user) return unauthorized(res);
-    req.user = { id: user.id, name: user.name, email: user.email ?? '', phone: user.phone };
+    req.user = { id: user._id, name: user.name, email: user.email ?? '', phone: user.phone };
     next();
   } catch (err) {
     next(err);

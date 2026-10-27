@@ -2,7 +2,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import Anthropic from '@anthropic-ai/sdk';
 import { ZodError } from 'zod';
 import { devPlan, env, isProduction, twilioConfigured } from './env.js';
-import { db, initDb } from './db/index.js';
+import { closeDb, initDb, pingDb } from './db/index.js';
 import { billingRouter } from './routes/billing.js';
 import { aiRouter } from './routes/ai.js';
 import { phoneRouter } from './routes/phone.js';
@@ -31,12 +31,7 @@ app.use(express.json({ limit: '15mb' }));
 app.set('trust proxy', 1); // so rate limits see the client IP behind a load balancer
 
 app.get('/health', async (_req, res) => {
-  let database = true;
-  try {
-    await db.query('select 1');
-  } catch {
-    database = false;
-  }
+  const database = await pingDb();
   res.status(database ? 200 : 503).json({
     ok: database,
     database,
@@ -112,7 +107,7 @@ const server = app.listen(env.PORT, () => {
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.on(signal, () => {
     server.close(() => {
-      db.close()?.finally(() => process.exit(0));
+      closeDb().finally(() => process.exit(0));
     });
     setTimeout(() => process.exit(0), 10_000).unref();
   });

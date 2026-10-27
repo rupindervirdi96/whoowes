@@ -40,7 +40,7 @@ Yearly: Plus $24.99, Pro $49.99. New subscribers get a 7-day trial (configurable
 The app talks to the WhoOwes server (`server/`) whenever `EXPO_PUBLIC_API_URL` is set:
 
 ```
-Phone app (Expo) ──HTTPS──► WhoOwes API (Node, server/) ──► PostgreSQL (Neon)
+Phone app (Expo) ──HTTPS──► WhoOwes API (Node, server/) ──► MongoDB (Atlas)
                                    ├──► Twilio Verify   (sign-in codes by SMS)
                                    ├──► Claude API      (receipt reading, Quick Add, insights)
                                    └──► Stripe          (Plus / Pro subscriptions)
@@ -55,7 +55,7 @@ Without `EXPO_PUBLIC_API_URL` the app runs as a self-contained **demo** on sampl
 ## Run it locally (no accounts needed)
 
 ```bash
-# 1. Server: embedded Postgres, test SMS code 123456
+# 1. Server: local MongoDB (starts by itself), test SMS code 123456
 cd server
 npm install
 cp .env.example .env         # optional: add ANTHROPIC_API_KEY for real receipt reading
@@ -67,26 +67,31 @@ echo EXPO_PUBLIC_API_URL=http://192.168.x.x:4000 > .env
 npx expo start -c            # scan the QR code with Expo Go
 ```
 
-Sign up with your real number: no text is sent locally, and the code is **123456** (the app shows it). Locally the database lives in `server/data/pglite`; delete that folder to start fresh. `DEV_PLAN=pro` in `server/.env` unlocks the paid AI features without Stripe.
+Sign up with your real number: no text is sent locally, and the code is **123456** (the app shows it). Locally the server starts its own MongoDB, stored in `server/data/mongo`; delete that folder to start fresh. The first start downloads MongoDB once (a few hundred MB), so it takes a minute; after that it starts in seconds. To use your Atlas cluster locally instead, set `MONGODB_URI` in `server/.env`. `DEV_PLAN=pro` in `server/.env` unlocks the paid AI features without Stripe.
 
 ---
 
 ## Go live on Render
 
-The server has to be online so everyone's phone can reach it. Render runs the server; the database is on Neon. Both have free tiers:
+The server has to be online so everyone's phone can reach it. Render runs the server; the database is MongoDB Atlas. Both have free tiers:
 
 1. **Push this repo to GitHub.**
-2. **Neon** (the database): sign up at neon.com → create a project (Postgres, region **AWS US West (Oregon)** to sit next to the Render server). On the project dashboard click **Connect** and copy the connection string (`postgresql://…neon.tech/neondb?sslmode=require…`). The server creates its tables on first start.
+2. **MongoDB Atlas** (the database): sign up at mongodb.com/atlas.
+   - Create a project (e.g. "WhoOwes"), then **Create cluster** → **Free**, provider **AWS**, region **Oregon (us-west-2)** to sit next to the Render server.
+   - **Database Access** → add a database user with a password (use **Autogenerate**, which avoids characters that need escaping in the URL).
+   - **Network Access** → **Add IP address** → **Allow access from anywhere** (`0.0.0.0/0`). Render's free servers don't have a fixed IP, so this is required; the password protects the database.
+   - **Clusters** → **Connect** → **Drivers** → copy the connection string (`mongodb+srv://<user>:<password>@cluster0.xxxx.mongodb.net/?…`) and put the user's password in place of `<password>`.
+   - The server creates its collections and indexes on first start, in a database named `whoowes`.
 3. **Twilio** (texts the sign-in codes): create an account at twilio.com. On a trial account, use Console → **Verify** → **Try out Verify**: the sample request contains the Service SID (`VA…`) and Account SID (`AC…`); the Auth Token is under **Account Info** on the Console home page. A trial can only text numbers you verify in the Console (up to 5); upgrade it before real users sign up.
-4. **Render**: Dashboard → **New → Blueprint** → choose this repo and branch. `render.yaml` creates the `whoowes-api` web service (check it says **free**). Paste the Neon string as `DATABASE_URL`, the Twilio values and your `ANTHROPIC_API_KEY` when asked; Stripe can stay empty until you charge.
-5. When the deploy is live, open `https://<your-service>.onrender.com/health`. It should show `"database": true` and `"sms": "twilio"`.
+4. **Render**: Dashboard → **New → Blueprint** → choose this repo and branch. `render.yaml` creates the `whoowes-api` web service (check it says **free**). Paste the Atlas connection string as `MONGODB_URI`, the Twilio values and your `ANTHROPIC_API_KEY` when asked; Stripe can stay empty until you charge.
+5. When the deploy is live, open `https://<your-service>.onrender.com/health`. It should show `"database": true` and `"sms": "twilio"`. If `database` is `false`, check the Atlas **Network Access** list and the password in the connection string.
 6. **Point the app at it**: in the app's `.env` set `EXPO_PUBLIC_API_URL=https://<your-service>.onrender.com`, then `npx expo start -c` (Expo Go) or build the app (below).
 
 **Costs.** Everything above runs on free tiers, with limits:
 - **Render free web service:** sleeps after 15 idle minutes, and the first request after that takes about a minute (the app just looks slow to load).
-- **Neon free database:** doesn't expire. 1 GB of storage; it pauses after 5 idle minutes and wakes on the next request (a short delay); 100 compute hours a month per project.
+- **MongoDB Atlas free cluster:** doesn't expire. 0.5 GB of storage (plenty for many thousands of expenses), up to 100 operations a second. Atlas pauses it only after 30 days with no connections at all, and you can resume it from the dashboard.
 
-When you have real users: upgrade the Render service to `0.5c-512mb` (a few dollars a month, see render.com/pricing) so it stops sleeping, and move Neon to a paid plan when you need more storage, backups or always-on compute. Twilio Verify charges per code sent, and Claude charges per receipt read.
+When you have real users: upgrade the Render service to `0.5c-512mb` (a few dollars a month, see render.com/pricing) so it stops sleeping, and move Atlas to a paid tier when you need more storage, speed or point-in-time backups. Twilio Verify charges per code sent, and Claude charges per receipt read.
 
 ### Building the app for other people
 
@@ -152,7 +157,7 @@ Photos are resized to 1600px JPEG on the phone before upload (this also converts
 ## Before launch
 
 - **Push notifications.** Reminders and payment confirmations show up when people open the app. Push needs a development or production build (not Expo Go) plus `expo-notifications`.
-- **Database backups.** Neon's free plan only keeps 6 hours of history. Before real users rely on it, move to a paid Neon plan with longer restore history, or schedule `pg_dump` backups.
+- **Database backups.** Turn on backups for the free Atlas cluster (cluster → **Backup**): Atlas then takes a daily snapshot and keeps the last four. Paid tiers add continuous, point-in-time backups.
 - **App Store / Google Play rules.** Selling digital subscriptions inside a mobile app is governed by store policies (Apple guideline 3.1.1 / Google Play Payments). Linking out to Stripe Checkout is currently allowed on Apple's **US** storefront, but most other storefronts still require in-app purchase for digital features. A common setup is Stripe for web/US plus StoreKit / Play Billing (for example via RevenueCat) elsewhere, all writing to the same entitlement record.
 - **Privacy policy.** You collect phone numbers and check hashed contacts; both stores require a privacy policy that says so.
 
@@ -173,14 +178,14 @@ src/
   services/                  impl.ts picks api/live.ts (server) or mock/* (demo); ai, billing, contacts, phoneAuth
   utils/                     balanceEngine (net positions, debt simplification), splitEngine, insights, csv, phone
 server/
-  src/db/                    PostgreSQL / PGlite connection + schema migrations
+  src/db/                    MongoDB connection, document shapes and indexes (local MongoDB in development)
   src/domain/                Permission checks, money helpers, JSON serializers
   src/routes/                phone.ts (sign-in), people.ts (me, friends, contacts, reminders),
                              money.ts (groups, expenses, payments, receipts), billing.ts, webhooks.ts, ai.ts
   src/ai/claude.ts           Claude prompts + schemas
   src/stripe.ts              Stripe client, price lookup, subscription → plan sync
   scripts/stripe-setup.ts    Creates products/prices
-render.yaml                  Render Blueprint for the API (database: Neon, via DATABASE_URL)
+render.yaml                  Render Blueprint for the API (database: MongoDB Atlas, via MONGODB_URI)
 assets/brand/                Logo source (owl-glyph.svg) — `npm run icons` regenerates every icon
 ```
 

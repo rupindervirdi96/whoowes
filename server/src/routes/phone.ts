@@ -14,13 +14,13 @@ import { z } from 'zod';
 import { signSession } from '../auth.js';
 import { devCodesAllowed, env, twilioConfigured } from '../env.js';
 import { db } from '../db/index.js';
-import { publicUser, type UserRow } from '../domain/common.js';
+import { publicUser } from '../domain/common.js';
 
 export const phoneRouter = Router();
 
 const DEV_CODE = '123456';
 export const hashPhone = (e164: string) => createHash('sha256').update(e164).digest('hex');
-const findByPhone = (phone: string) => db.one<UserRow>('select * from users where phone = $1', [phone]);
+const findByPhone = (phone: string) => db.users.findOne({ phone });
 
 const e164 = z.string().regex(/^\+[1-9]\d{6,14}$/, 'Phone number must be in international format, e.g. +14155550123');
 
@@ -115,12 +115,27 @@ phoneRouter.post('/verify', async (req, res, next) => {
     const isNewUser = !user;
     if (!user) {
       if (!body.name) return res.status(400).json({ message: 'Tell us your name to finish signing up.', code: 'name_required' });
-      user = (await db.one<UserRow>(
-        'insert into users (id, phone, phone_hash, name) values ($1, $2, $3, $4) on conflict (phone) do update set phone = excluded.phone returning *',
-        [randomUUID(), body.phone, hashPhone(body.phone), body.name],
+      // Upsert on the unique phone index: if two sign-ups race, both get the same account.
+      const now = new Date();
+      user = (await db.users.findOneAndUpdate(
+        { phone: body.phone },
+        {
+          $setOnInsert: {
+            _id: randomUUID(),
+            phone: body.phone,
+            phoneHash: hashPhone(body.phone),
+            name: body.name,
+            email: null,
+            emailLower: null,
+            avatarUrl: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        { upsert: true, returnDocument: 'after' },
       ))!;
     }
-    res.json({ isNewUser, token: signSession(user.id), user: publicUser(user, user.id) });
+    res.json({ isNewUser, token: signSession(user._id), user: publicUser(user, user._id) });
   } catch (err) {
     next(err);
   }

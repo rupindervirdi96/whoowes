@@ -21,45 +21,54 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireUser } from '../auth.js';
-import { db } from '../db/index.js';
+import { db, isDuplicateKey, type FriendshipDoc, type UserDoc } from '../db/index.js';
 import { stripe } from '../stripe.js';
 import { getAccount, saveAccount } from '../store.js';
 import { env } from '../env.js';
-import { canTransactWith, fail, iso, publicUser, route, toAmount, toCents, usersById, type UserRow } from '../domain/common.js';
+import {
+  canTransactWith,
+  escapeRegex,
+  fail,
+  iso,
+  myGroupIds,
+  pairKey,
+  publicUser,
+  route,
+  toAmount,
+  toCents,
+  usersById,
+} from '../domain/common.js';
 import { limited } from './phone.js';
 
 export const peopleRouter = Router();
 peopleRouter.use(requireUser);
 
-interface FriendshipRow {
-  id: string;
-  requester_id: string;
-  addressee_id: string;
-  status: 'pending' | 'accepted';
-  created_at: Date;
-}
+const HOUR = 60 * 60_000;
 
 /** Friend rows from my point of view (matches the app's Friend type). */
-async function serializeFriendships(rows: FriendshipRow[], me: string) {
-  const users = await usersById(rows.flatMap((r) => [r.requester_id, r.addressee_id]), me);
+async function serializeFriendships(rows: FriendshipDoc[], me: string) {
+  const users = await usersById(
+    rows.flatMap((r) => [r.requesterId, r.addresseeId]),
+    me,
+  );
   return rows.map((r) => {
-    if (r.status === 'pending' && r.addressee_id === me) {
+    if (r.status === 'pending' && r.addresseeId === me) {
       // Incoming: shaped as "they asked me" (userId = them, friendId = me).
-      return { id: r.id, userId: r.requester_id, friendId: me, friendUser: users.get(r.requester_id)!, status: r.status, createdAt: iso(r.created_at)! };
+      return { id: r._id, userId: r.requesterId, friendId: me, friendUser: users.get(r.requesterId)!, status: r.status, createdAt: iso(r.createdAt)! };
     }
-    const other = r.requester_id === me ? r.addressee_id : r.requester_id;
-    return { id: r.id, userId: me, friendId: other, friendUser: users.get(other)!, status: r.status, createdAt: iso(r.created_at)! };
+    const other = r.requesterId === me ? r.addresseeId : r.requesterId;
+    return { id: r._id, userId: me, friendId: other, friendUser: users.get(other)!, status: r.status, createdAt: iso(r.createdAt)! };
   });
 }
 
-const pairQuery = `select * from friendships where (requester_id = $1 and addressee_id = $2) or (requester_id = $2 and addressee_id = $1)`;
+const mine = (me: string) => ({ $or: [{ requesterId: me }, { addresseeId: me }] });
 
 // ─── Me ──────────────────────────────────────────────────────────────────────
 
 peopleRouter.get(
   '/me',
   route(async (req, res) => {
-    const u = await db.one<UserRow>('select * from users where id = $1', [req.user!.id]);
+    const u = await db.users.findOne({ _id: req.user!.id });
     res.json(publicUser(u!, req.user!.id));
   }),
 );
@@ -74,11 +83,14 @@ peopleRouter.patch(
         avatarUrl: z.string().url().max(500).optional(),
       })
       .parse(req.body);
-    const u = await db.one<UserRow>(
-      `update users set name = coalesce($2, name), email = case when $3::text is null then email when $3 = '' then null else $3 end,
-       avatar_url = coalesce($4, avatar_url), updated_at = now() where id = $1 returning *`,
-      [req.user!.id, body.name ?? null, body.email ?? null, body.avatarUrl ?? null],
-    );
+    const set: Partial<UserDoc> = { updatedAt: new Date() };
+    if (body.name !== undefined) set.name = body.name;
+    if (body.avatarUrl !== undefined) set.avatarUrl = body.avatarUrl;
+    if (body.email !== undefined) {
+      set.email = body.email || null; // '' clears it
+      set.emailLower = body.email ? body.email.toLowerCase() : null;
+    }
+    const u = await db.users.findOneAndUpdate({ _id: req.user!.id }, { $set: set }, { returnDocument: 'after' });
     res.json(publicUser(u!, req.user!.id));
   }),
 );
@@ -93,17 +105,25 @@ peopleRouter.delete(
       await stripe().subscriptions.cancel(account.subscriptionId);
       await saveAccount({ ...account, plan: 'free', status: 'canceled' });
     }
-    // Shared expenses and payments stay correct for everyone else, so the row is
+    // Shared expenses and payments stay correct for everyone else, so the user is
     // anonymised rather than deleted: no name, number or email remains.
-    await db.tx(async (q) => {
-      await q.query('delete from friendships where requester_id = $1 or addressee_id = $1', [me]);
-      await q.query('delete from group_members where user_id = $1', [me]);
-      await q.query('delete from reminders where from_user_id = $1 or to_user_id = $1', [me]);
-      await q.query(
-        `update users set name = 'Deleted user', phone = $2, phone_hash = '', email = null, avatar_url = null, updated_at = now() where id = $1`,
-        [me, `deleted:${me}`],
-      );
-    });
+    await db.friendships.deleteMany(mine(me));
+    await db.groups.updateMany({ 'members.userId': me }, { $pull: { members: { userId: me } } });
+    await db.reminders.deleteMany({ $or: [{ fromUserId: me }, { toUserId: me }] });
+    await db.users.updateOne(
+      { _id: me },
+      {
+        $set: {
+          name: 'Deleted user',
+          phone: `deleted:${me}`,
+          phoneHash: '',
+          email: null,
+          emailLower: null,
+          avatarUrl: null,
+          updatedAt: new Date(),
+        },
+      },
+    );
     res.status(204).end();
   }),
 );
@@ -116,21 +136,19 @@ peopleRouter.get(
     const me = req.user!.id;
     const q = String(req.query.q ?? '').trim();
     if (q.length < 2) return res.json([]);
-    let rows: UserRow[];
+    let rows: UserDoc[];
     if (/^\+[1-9]\d{6,14}$/.test(q)) {
-      rows = (await db.query<UserRow>('select * from users where phone = $1 and id <> $2', [q, me])).rows;
+      rows = await db.users.find({ phone: q, _id: { $ne: me } }).toArray();
     } else if (q.includes('@')) {
-      rows = (await db.query<UserRow>('select * from users where lower(email) = lower($1) and id <> $2', [q, me])).rows;
+      rows = await db.users.find({ emailLower: q.toLowerCase(), _id: { $ne: me } }).toArray();
     } else {
       // Names only match people I already share a group with, so the directory can't be browsed.
-      rows = (
-        await db.query<UserRow>(
-          `select distinct u.* from users u join group_members m on m.user_id = u.id
-           where m.group_id in (select group_id from group_members where user_id = $1)
-             and u.id <> $1 and u.name ilike $2 limit 20`,
-          [me, `%${q.replace(/[%_\\]/g, '\\$&')}%`],
-        )
-      ).rows;
+      const groups = await db.groups.find({ _id: { $in: await myGroupIds(me) } }, { projection: { members: 1 } }).toArray();
+      const ids = [...new Set(groups.flatMap((g) => g.members.map((m) => m.userId)))].filter((id) => id !== me);
+      rows = await db.users
+        .find({ _id: { $in: ids }, name: { $regex: escapeRegex(q), $options: 'i' } })
+        .limit(20)
+        .toArray();
     }
     res.json(rows.map((r) => publicUser(r, me)));
   }),
@@ -142,10 +160,7 @@ peopleRouter.get(
   '/friends',
   route(async (req, res) => {
     const me = req.user!.id;
-    const { rows } = await db.query<FriendshipRow>(
-      `select * from friendships where status = 'accepted' and (requester_id = $1 or addressee_id = $1)`,
-      [me],
-    );
+    const rows = await db.friendships.find({ status: 'accepted', ...mine(me) }).toArray();
     const list = await serializeFriendships(rows, me);
     res.json(list.sort((a, b) => a.friendUser.name.localeCompare(b.friendUser.name)));
   }),
@@ -155,10 +170,7 @@ peopleRouter.get(
   '/friends/requests',
   route(async (req, res) => {
     const me = req.user!.id;
-    const { rows } = await db.query<FriendshipRow>(
-      `select * from friendships where status = 'pending' and (requester_id = $1 or addressee_id = $1) order by created_at desc`,
-      [me],
-    );
+    const rows = await db.friendships.find({ status: 'pending', ...mine(me) }).sort({ createdAt: -1 }).toArray();
     res.json(await serializeFriendships(rows, me));
   }),
 );
@@ -171,33 +183,37 @@ peopleRouter.post(
     let targetId = body.userId;
     if (!targetId && body.emailOrPhone) {
       const v = body.emailOrPhone;
-      const found = v.includes('@')
-        ? await db.one<{ id: string }>('select id from users where lower(email) = lower($1)', [v])
-        : await db.one<{ id: string }>('select id from users where phone = $1', [v]);
-      targetId = found?.id;
+      const found = await db.users.findOne(v.includes('@') ? { emailLower: v.toLowerCase() } : { phone: v }, { projection: { _id: 1 } });
+      targetId = found?._id;
       if (!targetId) fail(404, `No WhoOwes account for ${v}. Send them an invite instead.`, 'not_found');
     }
     if (!targetId) fail(400, 'Who do you want to add?');
     if (targetId === me) fail(400, "That's you!");
-    if (!(await db.one('select 1 from users where id = $1', [targetId]))) fail(404, 'That person is not on WhoOwes.', 'not_found');
+    if (!(await db.users.findOne({ _id: targetId }, { projection: { _id: 1 } }))) fail(404, 'That person is not on WhoOwes.', 'not_found');
 
-    const result = await db.tx(async (q) => {
-      const existing = (await q.query<FriendshipRow>(pairQuery, [me, targetId])).rows[0];
-      if (existing?.status === 'accepted') fail(409, 'You are already friends.');
-      if (existing && existing.requester_id === me) fail(409, 'Request already sent.');
-      if (existing) {
-        // They already asked me: adding them back accepts it.
-        return (
-          await q.query<FriendshipRow>(`update friendships set status = 'accepted', responded_at = now() where id = $1 returning *`, [existing.id])
-        ).rows[0];
+    const pair = pairKey(me, targetId);
+    const existing = await db.friendships.findOne({ pair });
+    if (existing?.status === 'accepted') fail(409, 'You are already friends.');
+    if (existing && existing.requesterId === me) fail(409, 'Request already sent.');
+    let result: FriendshipDoc | null;
+    if (existing) {
+      // They already asked me: adding them back accepts it.
+      result = await db.friendships.findOneAndUpdate(
+        { _id: existing._id, status: 'pending' },
+        { $set: { status: 'accepted', respondedAt: new Date() } },
+        { returnDocument: 'after' },
+      );
+      if (!result) fail(409, 'That request changed. Refresh and try again.');
+    } else {
+      result = { _id: randomUUID(), requesterId: me, addresseeId: targetId, pair, status: 'pending', createdAt: new Date(), respondedAt: null };
+      try {
+        await db.friendships.insertOne(result);
+      } catch (err) {
+        // Both people tapped "Add" at the same moment: the unique pair index stops a duplicate.
+        if (isDuplicateKey(err)) fail(409, 'Request already sent.');
+        throw err;
       }
-      return (
-        await q.query<FriendshipRow>(
-          `insert into friendships (id, requester_id, addressee_id, status) values ($1, $2, $3, 'pending') returning *`,
-          [randomUUID(), me, targetId],
-        )
-      ).rows[0];
-    });
+    }
     res.status(201).json((await serializeFriendships([result], me))[0]);
   }),
 );
@@ -206,10 +222,10 @@ peopleRouter.post(
   '/friends/requests/:id/accept',
   route(async (req, res) => {
     const me = req.user!.id;
-    const row = await db.one<FriendshipRow>(
-      `update friendships set status = 'accepted', responded_at = now()
-       where id = $1 and addressee_id = $2 and status = 'pending' returning *`,
-      [req.params.id, me],
+    const row = await db.friendships.findOneAndUpdate(
+      { _id: String(req.params.id), addresseeId: me, status: 'pending' },
+      { $set: { status: 'accepted', respondedAt: new Date() } },
+      { returnDocument: 'after' },
     );
     if (!row) fail(404, 'Request not found.');
     res.json((await serializeFriendships([row], me))[0]);
@@ -220,10 +236,7 @@ peopleRouter.post(
   '/friends/requests/:id/decline',
   route(async (req, res) => {
     const me = req.user!.id;
-    await db.query(`delete from friendships where id = $1 and status = 'pending' and (addressee_id = $2 or requester_id = $2)`, [
-      req.params.id,
-      me,
-    ]);
+    await db.friendships.deleteOne({ _id: String(req.params.id), status: 'pending', ...mine(me) });
     res.status(204).end();
   }),
 );
@@ -231,10 +244,7 @@ peopleRouter.post(
 peopleRouter.delete(
   '/friends/:userId',
   route(async (req, res) => {
-    await db.query(
-      'delete from friendships where (requester_id = $1 and addressee_id = $2) or (requester_id = $2 and addressee_id = $1)',
-      [req.user!.id, req.params.userId],
-    );
+    await db.friendships.deleteOne({ pair: pairKey(req.user!.id, String(req.params.userId)) });
     res.status(204).end();
   }),
 );
@@ -248,17 +258,16 @@ peopleRouter.post(
     const to = String(req.params.userId);
     const { amount } = z.object({ amount: z.number().positive().optional() }).parse(req.body ?? {});
     if (!(await canTransactWith(me, to)) || to === me) fail(403, 'You can only remind friends or people in your groups.');
-    const recent = await db.one(
-      `select 1 from reminders where from_user_id = $1 and to_user_id = $2 and created_at > now() - interval '12 hours'`,
-      [me, to],
-    );
+    const recent = await db.reminders.findOne({ fromUserId: me, toUserId: to, createdAt: { $gt: new Date(Date.now() - 12 * HOUR) } });
     if (recent) fail(429, 'You already sent a reminder today. Give them a little time.', 'rate_limited');
-    await db.query('insert into reminders (id, from_user_id, to_user_id, amount_cents) values ($1, $2, $3, $4)', [
-      randomUUID(),
-      me,
-      to,
-      amount ? toCents(amount) : null,
-    ]);
+    await db.reminders.insertOne({
+      _id: randomUUID(),
+      fromUserId: me,
+      toUserId: to,
+      amountCents: amount ? toCents(amount) : null,
+      createdAt: new Date(),
+      dismissedAt: null,
+    });
     res.status(201).json({ ok: true });
   }),
 );
@@ -267,19 +276,21 @@ peopleRouter.get(
   '/reminders',
   route(async (req, res) => {
     const me = req.user!.id;
-    const { rows } = await db.query<{ id: string; from_user_id: string; amount_cents: number | null; created_at: Date }>(
-      `select id, from_user_id, amount_cents, created_at from reminders
-       where to_user_id = $1 and dismissed_at is null and created_at > now() - interval '14 days'
-       order by created_at desc limit 20`,
-      [me],
+    const rows = await db.reminders
+      .find({ toUserId: me, dismissedAt: null, createdAt: { $gt: new Date(Date.now() - 14 * 24 * HOUR) } })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .toArray();
+    const users = await usersById(
+      rows.map((r) => r.fromUserId),
+      me,
     );
-    const users = await usersById(rows.map((r) => r.from_user_id), me);
     res.json(
       rows.map((r) => ({
-        id: r.id,
-        fromUser: users.get(r.from_user_id),
-        amount: r.amount_cents == null ? undefined : toAmount(r.amount_cents),
-        createdAt: iso(r.created_at),
+        id: r._id,
+        fromUser: users.get(r.fromUserId),
+        amount: r.amountCents == null ? undefined : toAmount(r.amountCents),
+        createdAt: iso(r.createdAt),
       })),
     );
   }),
@@ -288,7 +299,7 @@ peopleRouter.get(
 peopleRouter.post(
   '/reminders/:id/dismiss',
   route(async (req, res) => {
-    await db.query('update reminders set dismissed_at = now() where id = $1 and to_user_id = $2', [req.params.id, req.user!.id]);
+    await db.reminders.updateOne({ _id: String(req.params.id), toUserId: req.user!.id }, { $set: { dismissedAt: new Date() } });
     res.status(204).end();
   }),
 );
@@ -300,12 +311,9 @@ peopleRouter.post(
   route(async (req, res) => {
     const me = req.user!.id;
     const { hashes } = z.object({ hashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(5000) }).parse(req.body);
-    if (limited(`match:${me}`, 30, 60 * 60_000)) fail(429, 'Too many attempts. Please wait a few minutes and try again.', 'rate_limited');
+    if (limited(`match:${me}`, 30, HOUR)) fail(429, 'Too many attempts. Please wait a few minutes and try again.', 'rate_limited');
     if (hashes.length === 0) return res.json({ matches: [] });
-    const { rows } = await db.query<UserRow & { phone_hash: string }>(
-      'select * from users where phone_hash = any($1::text[]) and id <> $2',
-      [hashes, me],
-    );
-    res.json({ matches: rows.map((u) => ({ hash: u.phone_hash, user: publicUser(u, me) })) });
+    const rows = await db.users.find({ phoneHash: { $in: hashes }, _id: { $ne: me } }).toArray();
+    res.json({ matches: rows.map((u) => ({ hash: u.phoneHash, user: publicUser(u, me) })) });
   }),
 );

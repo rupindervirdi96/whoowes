@@ -11,9 +11,12 @@ const schema = z.object({
   PUBLIC_URL: z.string().url().default(process.env.RENDER_EXTERNAL_URL || 'http://localhost:4000'),
   NODE_ENV: z.string().default('development'),
 
-  /** PostgreSQL connection string. Unset in local development = embedded PGlite. */
-  DATABASE_URL: optional(),
-  PGLITE_DIR: z.string().default('data/pglite'),
+  /** MongoDB connection string (Atlas: mongodb+srv://…). Unset in local development = a local MongoDB. */
+  MONGODB_URI: optional(),
+  /** Database name inside the cluster. */
+  MONGODB_DB: z.preprocess((v) => (v === '' ? undefined : v), z.string().default('whoowes')),
+  /** Where the local development MongoDB keeps its files. */
+  MONGO_LOCAL_DIR: z.string().default('data/mongo'),
 
   /** Signs session tokens. Required in production; generated and saved locally in development. */
   AUTH_JWT_SECRET: optional(),
@@ -40,8 +43,8 @@ export const isProduction = env.NODE_ENV === 'production';
 if (isProduction && !env.AUTH_JWT_SECRET) {
   throw new Error('AUTH_JWT_SECRET must be set in production (any long random string).');
 }
-if (isProduction && !env.DATABASE_URL) {
-  throw new Error('DATABASE_URL must be set in production.');
+if (isProduction && !env.MONGODB_URI) {
+  throw new Error('MONGODB_URI must be set in production (your MongoDB Atlas connection string).');
 }
 
 /** Development: keep one signing key across restarts so sessions survive. */
