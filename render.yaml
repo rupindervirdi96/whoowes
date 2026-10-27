@@ -1,5 +1,5 @@
 # Render Blueprint: Dashboard → New → Blueprint → pick this repo.
-# Creates the WhoOwes API (web service) and its PostgreSQL database.
+# Creates the WhoOwes API (web service). The database is on Neon (neon.com, free).
 # Values marked `sync: false` are asked for when you create the Blueprint.
 
 services:
@@ -15,10 +15,9 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Neon → your project → Connect → connection string (postgresql://…)
       - key: DATABASE_URL
-        fromDatabase:
-          name: whoowes-db
-          property: connectionString
+        sync: false
       - key: AUTH_JWT_SECRET
         generateValue: true
       # Phone sign-in codes (Twilio Console → Verify → Services)
@@ -36,10 +35,3 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-
-databases:
-  - name: whoowes-db
-    plan: free # free databases expire 30 days after creation. Upgrade before then to keep the data: 0.1c-256mb.
-    region: oregon
-    databaseName: whoowes
-    user: whoowes

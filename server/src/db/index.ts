@@ -2,8 +2,8 @@
  * Database access.
  *
  * - Production (and any time DATABASE_URL is set): PostgreSQL via node-postgres.
- *   On Render, use the database's *Internal* URL; SSL is turned on automatically
- *   for external hostnames.
+ *   In production this is a Neon connection string; TLS is turned on
+ *   automatically for hosted databases.
  * - Local development without DATABASE_URL: PGlite, a real Postgres compiled to
  *   WebAssembly, stored in server/data/pglite. Same SQL, nothing to install.
  *
@@ -30,18 +30,26 @@ interface Backend extends Queryable {
 
 let backend: Backend | null = null;
 
-function needsSsl(url: string) {
-  const host = new URL(url).hostname;
-  // Render internal hosts have no dots (e.g. dpg-abc123-a); external ones do.
-  return host.includes('.') && host !== 'localhost' && host !== '127.0.0.1';
+/**
+ * Hosted databases (Neon, Render external URLs, …) get TLS with full certificate
+ * checks; local and Render-internal hosts (no dots, e.g. dpg-abc123-a) don't.
+ * SSL settings in the URL (`sslmode=require` from Neon) are removed so this
+ * choice applies and node-postgres doesn't print its sslmode warning.
+ */
+function poolConfig(url: string): pg.PoolConfig {
+  const parsed = new URL(url);
+  const host = parsed.hostname;
+  const hosted = host.includes('.') && host !== 'localhost' && host !== '127.0.0.1';
+  for (const key of ['sslmode', 'sslrootcert', 'uselibpqcompat']) parsed.searchParams.delete(key);
+  return {
+    connectionString: parsed.toString(),
+    ssl: hosted ? { rejectUnauthorized: true } : undefined,
+    max: 10,
+  };
 }
 
 async function connectPostgres(url: string): Promise<Backend> {
-  const pool = new pg.Pool({
-    connectionString: url,
-    ssl: needsSsl(url) ? { rejectUnauthorized: false } : undefined,
-    max: 10,
-  });
+  const pool = new pg.Pool(poolConfig(url));
   pool.on('error', (err) => console.error('[db] idle client error', err.message));
   return {
     kind: 'postgres',
