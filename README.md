@@ -81,7 +81,11 @@ The server has to be online so everyone's phone can reach it. Render runs it plu
 4. When the deploy is live, open `https://<your-service>.onrender.com/health`. It should show `"database": true` and `"sms": "twilio"`.
 5. **Point the app at it**: in the app's `.env` set `EXPO_PUBLIC_API_URL=https://<your-service>.onrender.com`, then `npx expo start -c` (Expo Go) or build the app (below).
 
-Costs (check render.com/pricing): the smallest always-on web service and the smallest paid Postgres are a few dollars a month each. Render's free tier works for a quick test, but free web services sleep after 15 idle minutes (the first request then takes about a minute) and free databases are deleted after 30 days. Twilio Verify charges per code sent.
+**Costs.** `render.yaml` uses Render's **free** tier, which has limits:
+- The API sleeps after 15 idle minutes, and the first request after that takes about a minute (the app just looks slow to load).
+- The free database **expires 30 days after it's created**. You then have 14 days to upgrade it before it and its data are deleted. It has 1 GB of storage and no backups.
+
+When you have real users, change the plans in the Render dashboard (or in `render.yaml`): web `0.5c-512mb`, database `0.1c-256mb`, a few dollars a month each (see render.com/pricing). Twilio Verify charges per code sent, and Claude charges per receipt read.
 
 ### Building the app for other people
 

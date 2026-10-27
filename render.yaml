@@ -7,7 +7,7 @@ services:
     name: whoowes-api
     runtime: node
     rootDir: server
-    plan: 0.5c-512mb # smallest always-on instance. "free" works for trying it out but sleeps after 15 min idle.
+    plan: free # sleeps after 15 min idle; the first request after that takes about a minute. Upgrade later: 0.5c-512mb.
     region: oregon
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
@@ -39,7 +39,7 @@ services:
 
 databases:
   - name: whoowes-db
-    plan: 0.1c-256mb # smallest paid database. "free" databases are deleted after 30 days.
+    plan: free # free databases expire 30 days after creation. Upgrade before then to keep the data: 0.1c-256mb.
     region: oregon
     databaseName: whoowes
     user: whoowes
