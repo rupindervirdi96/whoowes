@@ -95,14 +95,34 @@ When you have real users: upgrade the Render service to `0.5c-512mb` (a few doll
 
 ### Building the app for other people
 
-Expo Go is for testing. To give the app to others, build it with `EXPO_PUBLIC_API_URL` set to the Render URL (the URL is baked in at build time):
+Expo Go is for testing. To give the app to others, build it with `EXPO_PUBLIC_API_URL` set to the Render URL (the URL is baked in at build time). `eas.json` already sets it for cloud builds, because `.env` is git-ignored and never uploaded to Expo's build servers.
 
-- **Android APK**: `npx expo prebuild --platform android`, then `cd android` and `gradlew assembleRelease`; or `eas build -p android --profile preview` with Expo's cloud builds.
+- **Android APK** (install directly on phones): `npx eas-cli build -p android --profile preview`. When it finishes, Expo gives a download link and QR code.
+- **Google Play** (`.aab`): `npx eas-cli build -p android --profile production`. The full publishing checklist (store listing, Data safety answers, subscriptions, testers) is in [docs/google-play.md](docs/google-play.md).
+- **Local build without Expo's servers**: `npx expo prebuild --platform android`, then `cd android` and `gradlew assembleRelease`. This reads `.env`. It needs Android Studio and a Java JDK.
 - **iPhone / app stores**: `eas build` + `eas submit` (iOS needs an Apple Developer account).
 
 ---
 
-## Payments (Stripe)
+## Payments
+
+Phone apps must sell subscriptions through the app store, so there are two paths that both feed the same plan check on the server:
+
+- **Android (and later iPhone): Google Play Billing through RevenueCat.** The paywall buys with the RevenueCat SDK; the server reads the result from RevenueCat's API and keeps it in sync with RevenueCat webhooks.
+- **Web: Stripe Checkout.**
+
+A user gets the better of the two plans. Setup for Google Play is in [docs/google-play.md](docs/google-play.md#4-subscriptions-google-play--revenuecat).
+
+```
+Paywall (Android) → RevenueCat SDK → Google Play payment sheet
+                 → POST /billing/sync → server asks RevenueCat → plan saved
+RevenueCat webhooks → POST /webhooks/revenuecat → server re-reads the customer (renewals, cancels, expiry, refunds)
+Account → Manage subscription → Google Play subscriptions page
+```
+
+RevenueCat setup the code relies on: entitlements named `plus` and `pro`; packages in the current offering named `plus_monthly`, `plus_yearly`, `pro_monthly`, `pro_yearly`; Google Play base plans whose ids contain "month" or "year". A phone build without `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` shows paid plans as "coming soon" (store rules don't allow Stripe there).
+
+### Stripe (web)
 
 ```bash
 cd server
@@ -127,7 +147,7 @@ The server enforces plans: every AI endpoint checks the caller's plan and monthl
 | Area | Endpoints |
 |---|---|
 | Sign-in | `POST /auth/phone/start` `{ phone }` · `POST /auth/phone/verify` `{ phone, code, name? }` → `{ user, token }` (30-day session) |
-| Me | `GET/PATCH/DELETE /me` (delete anonymises the account and cancels any subscription) |
+| Me | `GET/PATCH/DELETE /me` (delete anonymises the account, removes receipts, and cancels a Stripe subscription; store subscriptions are cancelled by the user in the store) |
 | Friends | `GET /friends` · `GET /friends/requests` · `POST /friends` · `POST /friends/requests/:id/accept` / `decline` · `DELETE /friends/:userId` · `GET /users/search?q=` |
 | Contacts | `POST /contacts/match` `{ hashes: sha256(E.164)[] }`: the server never sees raw numbers |
 | Reminders | `POST /friends/:userId/remind` · `GET /reminders` · `POST /reminders/:id/dismiss` |
@@ -135,7 +155,8 @@ The server enforces plans: every AI endpoint checks the caller's plan and monthl
 | Expenses | `GET /expenses?groupId=` · `GET/DELETE /expenses/:id` · `POST /expenses` · `POST /expenses/:id/splits/:userId/paid` |
 | Payments | `GET /settlements?groupId=` · `GET /settlements/pending` · `POST /settlements` · `POST /settlements/:id/respond` · `DELETE /settlements/:id` |
 | Receipts & AI | `POST /ai/receipts/parse` · `GET/PATCH /receipts/:id` · `POST /ai/expenses/quick-add` · `POST /ai/receipts/assign` · `POST /ai/insights` |
-| Billing | `GET /billing/subscription` · `POST /billing/checkout` · `POST /billing/portal` · `POST /webhooks/stripe` |
+| Billing | `GET /billing/subscription` · `POST /billing/sync` (after a store purchase) · `POST /billing/checkout` · `POST /billing/portal` · `POST /webhooks/revenuecat` · `POST /webhooks/stripe` |
+| Public pages | `GET /privacy` · `GET /terms` · `GET /delete-account` (contact address from `SUPPORT_EMAIL`) |
 
 Money is stored as integer cents. Sign-in code sends are rate-limited per number and per IP (SMS pumping costs real money); the limiter is in-memory, so move it to a shared store such as Redis if you run more than one server instance.
 
@@ -158,8 +179,9 @@ Photos are resized to 1600px JPEG on the phone before upload (this also converts
 
 - **Push notifications.** Reminders and payment confirmations show up when people open the app. Push needs a development or production build (not Expo Go) plus `expo-notifications`.
 - **Database backups.** Turn on backups for the free Atlas cluster (cluster → **Backup**): Atlas then takes a daily snapshot and keeps the last four. Paid tiers add continuous, point-in-time backups.
-- **App Store / Google Play rules.** Selling digital subscriptions inside a mobile app is governed by store policies (Apple guideline 3.1.1 / Google Play Payments). Linking out to Stripe Checkout is currently allowed on Apple's **US** storefront, but most other storefronts still require in-app purchase for digital features. A common setup is Stripe for web/US plus StoreKit / Play Billing (for example via RevenueCat) elsewhere, all writing to the same entitlement record.
-- **Privacy policy.** You collect phone numbers and check hashed contacts; both stores require a privacy policy that says so.
+- **iPhone subscriptions.** The RevenueCat code already handles iOS; add the App Store app in RevenueCat and set `EXPO_PUBLIC_REVENUECAT_IOS_KEY`.
+- **Privacy policy and terms.** The server serves drafts at `/privacy` and `/terms`, written from what the app actually does. Have them checked before you rely on them.
+- **Reviewer sign-in.** `REVIEW_PHONE` + `REVIEW_CODE` let store reviewers in without a text message. Change the code after each review, or clear both to turn it off.
 
 ---
 
@@ -200,6 +222,7 @@ The owl's brow is a **W**; its pupils are **split coins**. Edit `assets/brand/ow
 | `npm start` / `npm run ios` / `npm run android` / `npm run web` | Run the app |
 | `npm run typecheck` | TypeScript check |
 | `npm run icons` | Regenerate app icons from the brand SVG |
+| `npm run store-assets` | Google Play icon (512×512) and feature graphic (1024×500) into `assets/store/` |
 | `npm run server:dev` | Start the API server (from the repo root) |
 | `cd server && npm run stripe:setup` | Create Stripe products/prices |
 | `cd server && npm run stripe:listen` | Forward Stripe webhooks to localhost |

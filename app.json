@@ -9,12 +9,15 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.whoowes.app",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "WhoOwes uses the camera to scan receipts so you don't have to type every item.",
         "NSPhotoLibraryUsageDescription": "WhoOwes reads receipt photos you choose so it can split them for you.",
         "NSContactsUsageDescription": "WhoOwes checks your contacts to show which friends are already on WhoOwes. Numbers are hashed on your phone and never stored."
-      },
-      "bundleIdentifier": "com.whoowes.app"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +28,15 @@
       "package": "com.whoowes.app",
       "versionCode": 2,
       "blockedPermissions": [
-        "android.permission.WRITE_CONTACTS"
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
       ]
     },
     "web": {
@@ -51,7 +62,8 @@
         "expo-image-picker",
         {
           "cameraPermission": "WhoOwes uses the camera to scan receipts so you don't have to type every item.",
-          "photosPermission": "WhoOwes reads receipt photos you choose so it can split them for you."
+          "photosPermission": "WhoOwes reads receipt photos you choose so it can split them for you.",
+          "microphonePermission": false
         }
       ],
       "expo-localization",

@@ -4,6 +4,7 @@
  *   GET  /billing/subscription   → the caller's plan, status and AI scan usage
  *   POST /billing/checkout       → Stripe Checkout URL for Plus/Pro (monthly/yearly)
  *   POST /billing/portal         → Stripe Customer Portal URL (switch plan, card, cancel, invoices)
+ *   POST /billing/sync           → re-reads the caller's Google Play / App Store subscription (after a purchase)
  *   GET  /billing/return         → where Stripe sends the browser back; redirects into the app
  */
 
@@ -12,8 +13,10 @@ import { z } from 'zod';
 import { requireUser } from '../auth.js';
 import { env } from '../env.js';
 import { PLANS } from '../plans.js';
-import { getAccount, planOf, scansUsed } from '../store.js';
+import { effectiveSubscription, getAccount, planOf, scansUsed } from '../store.js';
 import { ensureCustomer, priceIdFor, stripe, syncSubscription } from '../stripe.js';
+import { syncStoreSubscription } from '../revenuecat.js';
+import { limited } from './phone.js';
 
 export const billingRouter = Router();
 
@@ -25,14 +28,16 @@ const returnUrlSchema = z
   .refine((u) => ALLOWED_RETURN.some((re) => re.test(u)), 'returnUrl must point back to the WhoOwes app');
 
 async function subscriptionPayload(userId: string) {
-  const account = await getAccount(userId);
+  const sub = await effectiveSubscription(userId);
   const plan = await planOf(userId);
   return {
     plan,
-    status: plan !== account.plan ? 'active' : account.status,
-    interval: account.interval,
-    currentPeriodEnd: account.currentPeriodEnd,
-    cancelAtPeriodEnd: account.cancelAtPeriodEnd ?? false,
+    status: plan !== sub.plan ? 'active' : sub.status,
+    interval: sub.interval,
+    currentPeriodEnd: sub.currentPeriodEnd,
+    cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+    provider: sub.provider,
+    productId: sub.productId,
     scansUsed: await scansUsed(userId),
     scansLimit: PLANS[plan].monthlyScanLimit,
   };
@@ -52,6 +57,13 @@ billingRouter.post('/checkout', requireUser, async (req, res, next) => {
       .object({ plan: z.enum(['plus', 'pro']), interval: z.enum(['month', 'year']), returnUrl: returnUrlSchema })
       .parse(req.body);
     const user = req.user!;
+    const current = await effectiveSubscription(user.id);
+    if (current.plan !== 'free' && current.provider && current.provider !== 'stripe') {
+      return res.status(409).json({
+        message: 'Your subscription is billed by the app store. Change it from the app on your phone.',
+        code: 'store_subscription',
+      });
+    }
     const account = await getAccount(user.id);
 
     // Already subscribed: plan changes go through the portal so proration is handled by Stripe.
@@ -99,6 +111,19 @@ billingRouter.post('/portal', requireUser, async (req, res, next) => {
       return_url: `${env.PUBLIC_URL}/billing/return?status=portal&to=${encodeURIComponent(returnUrl)}`,
     });
     res.json({ url: portal.url });
+  } catch (err) {
+    next(err);
+  }
+});
+
+billingRouter.post('/sync', requireUser, async (req, res, next) => {
+  try {
+    const userId = req.user!.id;
+    if (limited(`billing-sync:${userId}`, 30, 10 * 60_000)) {
+      return res.status(429).json({ message: 'Too many requests. Please wait a minute.', code: 'rate_limited' });
+    }
+    await syncStoreSubscription(userId);
+    res.json(await subscriptionPayload(userId));
   } catch (err) {
     next(err);
   }

@@ -110,6 +110,11 @@ peopleRouter.delete(
     await db.friendships.deleteMany(mine(me));
     await db.groups.updateMany({ 'members.userId': me }, { $pull: { members: { userId: me } } });
     await db.reminders.deleteMany({ $or: [{ fromUserId: me }, { toUserId: me }] });
+    // Receipt readings and Quick Add text are personal; the expenses made from them stay.
+    await db.receipts.deleteMany({ userId: me });
+    await db.aiUsage.deleteMany({ userId: me });
+    // Google Play / App Store subscriptions can only be cancelled by the user in
+    // the store; the app reminds them before deleting.
     await db.users.updateOne(
       { _id: me },
       {

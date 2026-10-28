@@ -1,21 +1,25 @@
 /**
  * Subscription + entitlement hooks.
  *
- * Checkout flow (live mode):
+ * Phone apps (Android / iOS) buy through the app store with RevenueCat; see
+ * services/storeBilling.ts. The server re-reads the purchase from RevenueCat.
+ *
+ * Web (live mode) uses Stripe:
  *   app → POST /billing/checkout → Stripe Checkout (in-app browser)
  *   → Stripe redirects to the server's /billing/return → server redirects to whoowes://billing/…
  *   → browser closes → we refetch the subscription (webhooks have updated it by then).
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { BillingService } from '../services';
+import { StoreBilling } from '../services/storeBilling';
 import { QUERY_KEYS } from '../constants';
 import { PLANS, planIncludes } from '../billing/plans';
-import type { ApiError, BillingInterval, Feature, PlanId } from '../types';
+import type { ApiError, BillingInterval, Feature, PlanId, Subscription } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { useShowToast } from '../store/uiStore';
 
@@ -81,11 +85,43 @@ export function useHandlePaywallError() {
   );
 }
 
+/** Keeps RevenueCat pointed at whoever is signed in. Mount once, near the root. */
+export function useStoreIdentity() {
+  const userId = useAuthStore((s) => s.user?.id);
+  useEffect(() => {
+    if (!StoreBilling.enabled) return;
+    (userId ? StoreBilling.identify(userId) : StoreBilling.reset()).catch((e) =>
+      console.warn('[billing] store sign-in failed', e),
+    );
+  }, [userId]);
+}
+
+/** Store prices for the paywall, in the user's own currency. Empty off-store. */
+export function useStorePackages() {
+  const userId = useAuthStore((s) => s.user?.id);
+  return useQuery({
+    queryKey: ['store-packages', userId],
+    queryFn: () => StoreBilling.packages(),
+    enabled: StoreBilling.enabled && !!userId,
+    staleTime: 10 * 60_000,
+    retry: 1,
+  });
+}
+
 export function useCheckout() {
   const queryClient = useQueryClient();
   const showToast = useShowToast();
   return useMutation({
     mutationFn: async ({ plan, interval }: { plan: Exclude<PlanId, 'free'>; interval: BillingInterval }) => {
+      if (StoreBilling.enabled) {
+        const current = queryClient.getQueryData<Subscription>(QUERY_KEYS.SUBSCRIPTION);
+        const result = await StoreBilling.purchase(plan, interval, current);
+        if (result.subscription) queryClient.setQueryData(QUERY_KEYS.SUBSCRIPTION, result.subscription);
+        return { plan, completed: result.completed };
+      }
+      if (StoreBilling.unavailable) {
+        throw { message: `Subscriptions aren't available in this version yet.`, statusCode: 0 } satisfies ApiError;
+      }
       const returnUrl = Linking.createURL('billing/return');
       const url = await BillingService.startCheckout(plan, interval, returnUrl);
       if (url) {
@@ -108,12 +144,31 @@ export function useManageSubscription() {
   const showToast = useShowToast();
   return useMutation({
     mutationFn: async () => {
+      const current = queryClient.getQueryData<Subscription>(QUERY_KEYS.SUBSCRIPTION);
+      if (current?.provider && current.provider !== 'stripe') {
+        // Store subscriptions can only be changed or cancelled in the store.
+        await StoreBilling.manage();
+        return;
+      }
       const returnUrl = Linking.createURL('billing/portal-return');
       const url = await BillingService.openPortal(returnUrl);
       if (url) await WebBrowser.openAuthSessionAsync(url, returnUrl);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SUBSCRIPTION }),
     onError: (e: ApiError) => showToast(e.message ?? 'Could not open billing', 'error'),
+  });
+}
+
+export function useRestorePurchases() {
+  const queryClient = useQueryClient();
+  const showToast = useShowToast();
+  return useMutation({
+    mutationFn: () => StoreBilling.restore(),
+    onSuccess: (sub) => {
+      queryClient.setQueryData(QUERY_KEYS.SUBSCRIPTION, sub);
+      showToast(sub.plan === 'free' ? 'No active subscription found on this account.' : `Restored WhoOwes ${PLANS[sub.plan].name}`, sub.plan === 'free' ? 'info' : 'success');
+    },
+    onError: (e: ApiError) => showToast(e.message ?? "Couldn't restore purchases", 'error'),
   });
 }
 

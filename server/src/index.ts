@@ -1,7 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { ZodError } from 'zod';
-import { devPlan, env, isProduction, twilioConfigured } from './env.js';
+import { devPlan, env, isProduction, revenueCatConfigured, reviewLogin, twilioConfigured } from './env.js';
 import { closeDb, initDb, pingDb } from './db/index.js';
 import { billingRouter } from './routes/billing.js';
 import { aiRouter } from './routes/ai.js';
@@ -9,6 +9,8 @@ import { phoneRouter } from './routes/phone.js';
 import { peopleRouter } from './routes/people.js';
 import { moneyRouter } from './routes/money.js';
 import { stripeWebhook } from './routes/webhooks.js';
+import { legalRouter } from './routes/legal.js';
+import { revenueCatWebhook } from './revenuecat.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -37,12 +39,17 @@ app.get('/health', async (_req, res) => {
     database,
     stripe: !!env.STRIPE_SECRET_KEY,
     webhooks: !!env.STRIPE_WEBHOOK_SECRET,
+    appStoreBilling: revenueCatConfigured && !!env.REVENUECAT_WEBHOOK_AUTH,
+    reviewLogin: !!reviewLogin,
     ai: !!env.ANTHROPIC_API_KEY,
     sms: twilioConfigured ? 'twilio' : isProduction ? 'off' : 'dev-code',
     devPlan: devPlan ?? null,
   });
 });
 
+// Privacy policy, terms and account deletion pages (public, linked from the app and the store listing).
+app.use(legalRouter);
+app.post('/webhooks/revenuecat', revenueCatWebhook);
 app.use('/billing', billingRouter);
 app.use('/ai', aiRouter);
 app.use('/auth/phone', phoneRouter);
@@ -93,6 +100,8 @@ const server = app.listen(env.PORT, () => {
   console.log(`WhoOwes API listening on :${env.PORT}`);
   if (!env.STRIPE_SECRET_KEY) console.log('  ⚠ STRIPE_SECRET_KEY not set — billing routes will return 503');
   if (!env.ANTHROPIC_API_KEY) console.log('  ⚠ ANTHROPIC_API_KEY not set — AI routes will return 503');
+  if (!revenueCatConfigured) console.log('  ⚠ REVENUECAT_SECRET_KEY not set — Google Play / App Store subscriptions are off');
+  if (reviewLogin) console.log('  ⚠ Reviewer sign-in is on (REVIEW_PHONE)');
   if (devPlan) console.log(`  ⚠ DEV_PLAN=${devPlan} — every user gets this plan (development only)`);
   if (!twilioConfigured) {
     console.log(

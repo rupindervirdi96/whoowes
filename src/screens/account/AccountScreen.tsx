@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { Linking, View } from 'react-native';
 import { useTheme } from '../../theme';
 import { RootScreenProps } from '../../types/navigation';
 import { useCurrentUser, useDeleteAccount, useLogout, useUpdateProfile } from '../../hooks/useAuth';
@@ -8,6 +8,7 @@ import { useEntitlements, useManageSubscription, useResetDemoPlan } from '../../
 import { useShowModal, useUIStore, ThemePreference } from '../../store/uiStore';
 import { PLANS } from '../../billing/plans';
 import { APP_VERSION } from '../../constants';
+import { LEGAL_URLS, USE_MOCK_API } from '../../config';
 import { formatShortDate } from '../../utils/date';
 import Screen from '../../components/ui/Screen';
 import Text from '../../components/ui/Text';
@@ -39,6 +40,8 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email ?? '');
 
+  const storeBilled = !!subscription?.provider && subscription.provider !== 'stripe';
+  const storeName = subscription?.provider === 'app_store' ? 'the App Store' : 'Google Play';
   const used = subscription?.scansUsed ?? 0;
   const limit = subscription?.scansLimit;
 
@@ -70,7 +73,9 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
 
         {subscription?.status === 'past_due' ? (
           <Text variant="caption" tone="negative" style={{ marginTop: 10 }}>
-            Your last payment failed — update your card to keep {PLANS[plan].name}.
+            {storeBilled
+              ? `Your last payment failed — update your payment method in ${storeName} to keep ${PLANS[plan].name}.`
+              : `Your last payment failed — update your card to keep ${PLANS[plan].name}.`}
           </Text>
         ) : null}
         {isPaid && subscription?.currentPeriodEnd ? (
@@ -105,7 +110,7 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
           {plan !== 'pro' ? <Button title={isPaid ? 'Upgrade to Pro' : 'See plans'} variant="pro" style={{ flex: 1 }} onPress={() => navigation.navigate('Plans')} /> : null}
           {isPaid ? (
             <Button
-              title={subscription?.isDemo ? (subscription.cancelAtPeriodEnd ? 'Resume' : 'Cancel') : 'Manage billing'}
+              title={subscription?.isDemo ? (subscription.cancelAtPeriodEnd ? 'Resume' : 'Cancel') : storeBilled ? 'Manage subscription' : 'Manage billing'}
               variant="secondary"
               style={{ flex: 1 }}
               loading={manage.isPending}
@@ -139,7 +144,13 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
       <Card padding={4} style={{ paddingHorizontal: 12 }}>
         <ListRow leading={<LogoMark size={28} />} title="WhoOwes" subtitle={`Version ${APP_VERSION}`} divider />
         <ListRow leading={<Icon name="phone-iphone" color={t.colors.textSecondary} />} title="Phone" trailing={<Text tone="secondary">{user.phone ? formatPhone(user.phone) : 'Not set'}</Text>} divider />
-        <ListRow leading={<Icon name="event" color={t.colors.textSecondary} />} title="Member since" trailing={<Text tone="secondary">{user.createdAt ? formatShortDate(user.createdAt) : '—'}</Text>} />
+        <ListRow leading={<Icon name="event" color={t.colors.textSecondary} />} title="Member since" trailing={<Text tone="secondary">{user.createdAt ? formatShortDate(user.createdAt) : '—'}</Text>} divider={!USE_MOCK_API} />
+        {!USE_MOCK_API ? (
+          <>
+            <ListRow leading={<Icon name="privacy-tip" color={t.colors.textSecondary} />} title="Privacy policy" chevron divider onPress={() => Linking.openURL(LEGAL_URLS.privacy)} />
+            <ListRow leading={<Icon name="description" color={t.colors.textSecondary} />} title="Terms of service" chevron onPress={() => Linking.openURL(LEGAL_URLS.terms)} />
+          </>
+        ) : null}
       </Card>
 
       <Button
@@ -168,7 +179,11 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
         onPress={() =>
           showModal({
             title: 'Delete your account?',
-            body: 'Your profile, friends and phone number are removed and any subscription is cancelled. Expenses you shared stay in other people’s history as “Deleted user”. This can’t be undone.',
+            body:
+              (storeBilled && isPaid
+                ? `First cancel your subscription in ${storeName} → Subscriptions — deleting your account doesn’t stop store billing. `
+                : '') +
+              `Your profile, friends and phone number are removed${storeBilled ? '' : ' and any subscription is cancelled'}. Expenses you shared stay in other people’s history as “Deleted user”. This can’t be undone.`,
             confirmLabel: 'Delete account',
             variant: 'danger',
             onConfirm: () => deleteAccount.mutate(),

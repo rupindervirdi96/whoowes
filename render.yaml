@@ -31,7 +31,21 @@ services:
       # AI receipt reading (console.anthropic.com → API keys)
       - key: ANTHROPIC_API_KEY
         sync: false
-      # Subscriptions (optional until you charge: dashboard.stripe.com)
+      # Google Play subscriptions through RevenueCat (app.revenuecat.com):
+      # Project settings → API keys → secret key (v1), and the webhook's Authorization value.
+      - key: REVENUECAT_SECRET_KEY
+        sync: false
+      - key: REVENUECAT_WEBHOOK_AUTH
+        sync: false
+      # Sign-in for Google Play / App Store reviewers (a number + 6-digit code you choose).
+      - key: REVIEW_PHONE
+        sync: false
+      - key: REVIEW_CODE
+        sync: false
+      # Shown on /privacy, /terms and /delete-account.
+      - key: SUPPORT_EMAIL
+        sync: false
+      # Web subscriptions (optional: dashboard.stripe.com)
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET

@@ -25,6 +25,12 @@ const schema = z.object({
   STRIPE_WEBHOOK_SECRET: optional(),
   TRIAL_DAYS: z.coerce.number().int().min(0).default(7),
 
+  // Google Play / App Store subscriptions go through RevenueCat.
+  /** RevenueCat secret API key (v1), used to read a customer's subscriptions. */
+  REVENUECAT_SECRET_KEY: optional(),
+  /** The exact Authorization header value set on the RevenueCat webhook. */
+  REVENUECAT_WEBHOOK_AUTH: optional(),
+
   ANTHROPIC_API_KEY: optional(),
 
   // Phone sign-in codes are sent with Twilio Verify. Without these, development
@@ -32,6 +38,16 @@ const schema = z.object({
   TWILIO_ACCOUNT_SID: optional(),
   TWILIO_AUTH_TOKEN: optional(),
   TWILIO_VERIFY_SERVICE_SID: optional(),
+
+  /**
+   * A sign-in for app store reviewers, who can't receive our texts: this number
+   * skips Twilio and accepts REVIEW_CODE instead. Leave both empty to turn it off.
+   */
+  REVIEW_PHONE: z.preprocess((v) => (v === '' ? undefined : v), z.string().regex(/^\+[1-9]\d{6,14}$/).optional()),
+  REVIEW_CODE: z.preprocess((v) => (v === '' ? undefined : v), z.string().regex(/^\d{6}$/).optional()),
+
+  /** Shown on the privacy, terms and account deletion pages. */
+  SUPPORT_EMAIL: optional(),
 
   /** Development only: treat every user as being on this plan (free | plus | pro). */
   DEV_PLAN: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['free', 'plus', 'pro']).optional()),
@@ -63,6 +79,11 @@ export const twilioConfigured = !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOK
 
 /** Test codes (123456) only on non-production servers without Twilio. */
 export const devCodesAllowed = !twilioConfigured && !isProduction;
+
+export const revenueCatConfigured = !!env.REVENUECAT_SECRET_KEY;
+
+/** The reviewer sign-in is on only when both values are set. */
+export const reviewLogin = env.REVIEW_PHONE && env.REVIEW_CODE ? { phone: env.REVIEW_PHONE, code: env.REVIEW_CODE } : null;
 
 /** The plan override for local testing (never applies in production). */
 export const devPlan = isProduction ? undefined : env.DEV_PLAN;

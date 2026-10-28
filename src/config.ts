@@ -16,5 +16,18 @@ export const API_TIMEOUT_MS = 30_000;
 /** AI calls (receipt vision, insights) can take longer than normal requests. */
 export const AI_TIMEOUT_MS = 90_000;
 
+/**
+ * RevenueCat public SDK keys (Project settings → API keys). Not secret: they can
+ * only start purchases. Set per platform to turn on store subscriptions there.
+ */
+export const REVENUECAT_ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ?? '';
+export const REVENUECAT_IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? '';
+
+/** Where the privacy policy, terms and account deletion pages live (served by the server). */
+export const LEGAL_URLS = {
+  privacy: `${API_URL}/privacy`,
+  terms: `${API_URL}/terms`,
+};
+
 /** Deep-link scheme registered in app.json — Stripe Checkout returns here. */
 export const APP_SCHEME = 'whoowes';

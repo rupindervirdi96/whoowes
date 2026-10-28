@@ -137,9 +137,23 @@ export interface ReceiptDoc {
   createdAt: Date;
 }
 
+/** A Google Play / App Store subscription, as last reported by RevenueCat. */
+export interface StoreSubscriptionDoc {
+  /** RevenueCat's store name, e.g. PLAY_STORE or APP_STORE. */
+  store: string;
+  productId: string;
+  plan: string;
+  status: string;
+  interval: string | null;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  syncedAt: Date;
+}
+
 export interface BillingAccountDoc {
   /** The user id. */
   _id: string;
+  // Stripe (web) subscription.
   stripeCustomerId: string | null;
   subscriptionId: string | null;
   plan: string;
@@ -147,6 +161,8 @@ export interface BillingAccountDoc {
   interval: string | null;
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
+  /** App store subscription (through RevenueCat), kept apart from the Stripe fields. */
+  store?: StoreSubscriptionDoc | null;
   updatedAt: Date;
 }
 

@@ -331,6 +331,10 @@ export interface Subscription {
   scansLimit: number | null;
   /** True when the app is running against the local mock (no real charges). */
   isDemo?: boolean;
+  /** Who bills the subscription: Stripe (web) or an app store. */
+  provider?: 'stripe' | 'play_store' | 'app_store' | 'other_store';
+  /** App store product id of the current subscription (used to switch plans). */
+  productId?: string;
 }
 
 // ─── AI ──────────────────────────────────────────────────────────────────────

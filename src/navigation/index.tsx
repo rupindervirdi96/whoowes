@@ -9,6 +9,7 @@ import { createNativeStackNavigator, NativeStackNavigationOptions } from '@react
 import { StatusBar } from 'expo-status-bar';
 import { RootStackParamList } from '../types/navigation';
 import { useAuthStore } from '../store/authStore';
+import { useStoreIdentity } from '../hooks/useBilling';
 import { useTheme } from '../theme';
 import AuthNavigator from './AuthNavigator';
 import MainTabs from './MainTabs';
@@ -35,6 +36,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator: React.FC = () => {
   const t = useTheme();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  useStoreIdentity();
 
   const navTheme = useMemo<NavTheme>(() => {
     const base = t.isDark ? DarkTheme : DefaultTheme;

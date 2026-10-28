@@ -6,13 +6,16 @@
  *
  * Codes are sent and checked by Twilio Verify. A development server without
  * Twilio credentials accepts 123456 instead, so the flow can be tried locally.
+ *
+ * App store reviewers can't receive our texts, so REVIEW_PHONE + REVIEW_CODE
+ * (set on the server) give them one sign-in that skips Twilio.
  */
 
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { signSession } from '../auth.js';
-import { devCodesAllowed, env, twilioConfigured } from '../env.js';
+import { devCodesAllowed, env, reviewLogin, twilioConfigured } from '../env.js';
 import { db } from '../db/index.js';
 import { publicUser } from '../domain/common.js';
 
@@ -60,7 +63,13 @@ async function twilio(path: string, form: Record<string, string>) {
   return { ok: res.ok, httpStatus: res.status, body };
 }
 
+const isReviewPhone = (phone: string) => !!reviewLogin && phone === reviewLogin.phone;
+
 async function sendCode(phone: string) {
+  if (isReviewPhone(phone)) {
+    console.log('[phone] reviewer sign-in started (no text sent)');
+    return;
+  }
   if (devCodesAllowed) {
     console.log(`[phone] dev mode: code for ${phone} is ${DEV_CODE}`);
     return;
@@ -79,6 +88,11 @@ async function sendCode(phone: string) {
 }
 
 async function checkCode(phone: string, code: string): Promise<boolean> {
+  if (isReviewPhone(phone)) {
+    const a = Buffer.from(code);
+    const b = Buffer.from(reviewLogin!.code);
+    return a.length === b.length && timingSafeEqual(a, b);
+  }
   if (devCodesAllowed) return code === DEV_CODE;
   const r = await twilio('VerificationCheck', { To: phone, Code: code });
   if (r.httpStatus === 404) return false; // expired or already used

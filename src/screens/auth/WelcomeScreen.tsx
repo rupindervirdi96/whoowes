@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,7 +7,7 @@ import type { CountryCode } from 'libphonenumber-js';
 import { AuthStackParamList } from '../../types/navigation';
 import { useLogin, useStartPhoneSignIn } from '../../hooks/useAuth';
 import { deviceCountry, toE164 } from '../../utils/phone';
-import { USE_MOCK_API } from '../../config';
+import { LEGAL_URLS, USE_MOCK_API } from '../../config';
 import { useTheme } from '../../theme';
 import Text from '../../components/ui/Text';
 import Button from '../../components/ui/Button';
@@ -84,6 +84,19 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
               <Text variant="caption" tone="tertiary" align="center" style={{ marginTop: t.spacing.md }}>
                 We’ll text you a 6-digit code. Message and data rates may apply.
               </Text>
+              {!USE_MOCK_API ? (
+                <Text variant="caption" tone="tertiary" align="center" style={{ marginTop: 4 }}>
+                  By continuing you agree to the{' '}
+                  <Text variant="caption" weight="bold" tone="secondary" onPress={() => Linking.openURL(LEGAL_URLS.terms)} accessibilityRole="link">
+                    Terms
+                  </Text>{' '}
+                  and{' '}
+                  <Text variant="caption" weight="bold" tone="secondary" onPress={() => Linking.openURL(LEGAL_URLS.privacy)} accessibilityRole="link">
+                    Privacy Policy
+                  </Text>
+                  .
+                </Text>
+              ) : null}
             </View>
 
             <View style={{ flex: 1, minHeight: t.spacing.xl }} />

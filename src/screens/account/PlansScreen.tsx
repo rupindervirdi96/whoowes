@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Linking, Pressable, ScrollView, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { RootScreenProps } from '../../types/navigation';
 import { BillingInterval, PlanId } from '../../types';
 import { FEATURE_COPY, PLANS, yearlySavingsPercent } from '../../billing/plans';
-import { useCheckout, useEntitlements, useManageSubscription } from '../../hooks/useBilling';
+import { useCheckout, useEntitlements, useManageSubscription, useRestorePurchases, useStorePackages } from '../../hooks/useBilling';
 import { BillingService } from '../../services';
+import { StoreBilling, packageIdFor } from '../../services/storeBilling';
+import { LEGAL_URLS, USE_MOCK_API } from '../../config';
 import Text from '../../components/ui/Text';
 import Button from '../../components/ui/Button';
 import IconButton from '../../components/ui/IconButton';
@@ -23,6 +25,10 @@ const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) 
   const { plan: current } = useEntitlements();
   const checkout = useCheckout();
   const manage = useManageSubscription();
+  const restore = useRestorePurchases();
+  const store = useStorePackages();
+  const useStore = StoreBilling.enabled;
+  const pkg = (id: PaidPlan, iv: BillingInterval) => store.data?.[packageIdFor(id, iv)];
   const minPlan = feature ? FEATURE_COPY[feature].minPlan : 'pro';
   const [interval, setInterval] = useState<BillingInterval>('year');
   const [selected, setSelected] = useState<PaidPlan>(minPlan === 'plus' && current === 'free' ? 'plus' : 'pro');
@@ -31,6 +37,32 @@ const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) 
   const price = chosen.price[interval];
   const perMonth = interval === 'year' ? price / 12 : price;
   const isCurrent = current === selected;
+  const chosenPkg = pkg(selected, interval);
+
+  // Store builds show the store's own prices, in the user's currency.
+  const priceLabel = (id: PaidPlan) => (useStore ? pkg(id, interval)?.product.priceString ?? '—' : `$${PLANS[id].price[interval].toFixed(2)}`);
+  const perMonthLabel = (id: PaidPlan) =>
+    useStore ? pkg(id, 'year')?.product.pricePerMonthString ?? null : `$${(PLANS[id].price.year / 12).toFixed(2)}`;
+  const savings = (() => {
+    const m = pkg('pro', 'month')?.product.price;
+    const y = pkg('pro', 'year')?.product.price;
+    return useStore && m && y ? Math.round((1 - y / (m * 12)) * 100) : yearlySavingsPercent(PLANS.pro);
+  })();
+  const trial = useStore ? chosenPkg?.product.defaultOption?.freePhase?.billingPeriod : null;
+  const trialLabel = trial ? `${trial.value}-${trial.unit.toLowerCase()} free trial, then ` : '';
+  const per = interval === 'year' ? 'year' : 'month';
+
+  let ctaTitle = `Get ${chosen.name} · $${perMonth.toFixed(2)}/mo`;
+  if (useStore) ctaTitle = chosenPkg ? `Subscribe · ${chosenPkg.product.priceString}/${per}` : store.isLoading ? 'Loading prices…' : 'Not available right now';
+  if (StoreBilling.unavailable) ctaTitle = 'Coming soon';
+  const ctaDisabled = StoreBilling.unavailable || (useStore && !chosenPkg);
+
+  let footnote = `Billed ${interval === 'year' ? 'yearly' : 'monthly'} via Stripe. Cancel anytime from Account → Manage billing.`;
+  if (BillingService.isDemo) footnote = 'Demo mode — no card needed, nothing is charged.';
+  if (useStore) {
+    footnote = `${trialLabel}${chosenPkg?.product.priceString ?? ''} per ${per}, billed by ${StoreBilling.storeName}. Renews automatically until you cancel, anytime in ${StoreBilling.storeName} → Subscriptions.`;
+  }
+  if (StoreBilling.unavailable) footnote = "Subscriptions aren't available in this version of the app yet.";
   const headline = feature ? FEATURE_COPY[feature].title : 'Let AI do the math';
   const sub = feature ? FEATURE_COPY[feature].body : 'Scan receipts, add expenses by typing, and see where the money goes.';
 
@@ -76,7 +108,7 @@ const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) 
                 style={{ paddingHorizontal: 18, height: 36, borderRadius: 999, justifyContent: 'center', backgroundColor: interval === iv ? '#FFFFFF' : 'transparent' }}
               >
                 <Text variant="label" color={interval === iv ? t.brand.ink : '#FFFFFF'}>
-                  {iv === 'month' ? 'Monthly' : `Yearly · save ${yearlySavingsPercent(PLANS.pro)}%`}
+                  {iv === 'month' ? 'Monthly' : savings > 0 ? `Yearly · save ${savings}%` : 'Yearly'}
                 </Text>
               </Pressable>
             ))}
@@ -115,12 +147,12 @@ const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) 
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 8, marginLeft: 32 }}>
                     <Text variant="h2" tabular>
-                      ${p.price[interval].toFixed(2)}
+                      {priceLabel(id)}
                     </Text>
-                    <Text tone="tertiary">/{interval === 'year' ? 'year' : 'month'}</Text>
-                    {interval === 'year' ? (
+                    <Text tone="tertiary">/{per}</Text>
+                    {interval === 'year' && perMonthLabel(id) ? (
                       <Text variant="caption" tone="positive" style={{ marginLeft: 'auto' }}>
-                        ${(p.price.year / 12).toFixed(2)}/mo
+                        {perMonthLabel(id)}/mo
                       </Text>
                     ) : null}
                   </View>
@@ -159,24 +191,28 @@ const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) 
           {isCurrent ? (
             <Button title="Manage subscription" variant="secondary" size="lg" fullWidth loading={manage.isPending} onPress={() => manage.mutate()} />
           ) : (
-            <Button
-              title={`Get ${chosen.name} · $${perMonth.toFixed(2)}/mo`}
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={checkout.isPending}
-              onPress={buy}
-            />
+            <Button title={ctaTitle} variant="primary" size="lg" fullWidth disabled={ctaDisabled} loading={checkout.isPending} onPress={buy} />
           )}
           <Text variant="caption" tone="tertiary" align="center" style={{ marginTop: 8 }}>
-            {BillingService.isDemo
-              ? 'Demo mode — no card needed, nothing is charged.'
-              : `Billed ${interval === 'year' ? 'yearly' : 'monthly'} via Stripe. Cancel anytime from Account → Manage billing.`}
+            {footnote}
           </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', columnGap: 16, rowGap: 4, marginTop: 6 }}>
+            {useStore ? <FooterLink label={restore.isPending ? 'Restoring…' : 'Restore purchases'} onPress={() => !restore.isPending && restore.mutate()} /> : null}
+            {!USE_MOCK_API ? <FooterLink label="Terms" onPress={() => Linking.openURL(LEGAL_URLS.terms)} /> : null}
+            {!USE_MOCK_API ? <FooterLink label="Privacy" onPress={() => Linking.openURL(LEGAL_URLS.privacy)} /> : null}
+          </View>
         </View>
       </SafeAreaView>
     </View>
   );
 };
+
+const FooterLink: React.FC<{ label: string; onPress: () => void }> = ({ label, onPress }) => (
+  <Pressable onPress={onPress} hitSlop={8} accessibilityRole="link">
+    <Text variant="caption" weight="bold" tone="secondary">
+      {label}
+    </Text>
+  </Pressable>
+);
 
 export default PlansScreen;

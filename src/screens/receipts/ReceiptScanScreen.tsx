@@ -68,10 +68,10 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
   };
 
   const fromImagePicker = async (source: 'camera' | 'gallery') => {
-    const perm =
-      source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      showToast(`Allow ${source === 'camera' ? 'camera' : 'photo'} access in Settings to scan receipts.`, 'warning');
+    // The system photo picker needs no permission (and the app doesn't request
+    // photo-library access, which Google Play restricts); only the camera does.
+    if (source === 'camera' && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
+      showToast('Allow camera access in Settings to scan receipts.', 'warning');
       return;
     }
     // Full quality here; the photo is resized and compressed just before upload.
