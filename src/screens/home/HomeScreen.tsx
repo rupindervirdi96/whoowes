@@ -23,16 +23,20 @@ import BalanceHero from '../../components/BalanceHero';
 import ExpenseRow from '../../components/ExpenseRow';
 import SettlementRow from '../../components/SettlementRow';
 import EmptyState from '../../components/ui/EmptyState';
+import { useT, type TKey } from '../../i18n';
+import { useMyCurrency } from '../../hooks/useCurrency';
 
-function greeting() {
+function greetingKey(): TKey {
   const h = new Date().getHours();
-  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  return h < 12 ? 'home.morning' : h < 18 ? 'home.afternoon' : 'home.evening';
 }
 
 const HomeScreen: React.FC = () => {
   const t = useTheme();
+  const { t: tr } = useT();
   const navigation = useNavigation();
   const user = useCurrentUser()!;
+  const myCurrency = useMyCurrency();
   const openAddSheet = useUIStore((s) => s.openAddSheet);
   const balancesQ = useBalances();
   const activity = useActivity();
@@ -43,7 +47,7 @@ const HomeScreen: React.FC = () => {
   const dismissReminder = useDismissReminder();
   const contacts = useContactMatches();
 
-  const totals = balancesQ.data?.totals ?? { totalOwed: 0, totalOwes: 0, netBalance: 0 };
+  const totals = balancesQ.data?.totals ?? [];
   const balances = balancesQ.data?.balances ?? [];
   const incoming = requests?.incoming ?? [];
   const newOnWhoOwes = contacts.data?.onWhoOwes.filter((m) => m.state === 'none') ?? [];
@@ -64,30 +68,30 @@ const HomeScreen: React.FC = () => {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: t.spacing.sm, marginBottom: t.spacing.lg }}>
         <View style={{ flex: 1 }}>
           <Text variant="caption" tone="tertiary">
-            {greeting()}
+            {tr(greetingKey())}
           </Text>
           <Text variant="h2" numberOfLines={1}>
             {firstName(user.name)}
           </Text>
         </View>
-        <Pressable onPress={() => navigation.navigate('Account')} accessibilityLabel="Account" accessibilityRole="button" hitSlop={8}>
+        <Pressable onPress={() => navigation.navigate('Account')} accessibilityLabel={tr('nav.account')} accessibilityRole="button" hitSlop={8}>
           <Avatar name={user.name} uri={user.avatarUrl} size="md" />
         </Pressable>
       </View>
 
-      <BalanceHero totalOwed={totals.totalOwed} totalOwes={totals.totalOwes} onSettleUp={() => navigation.navigate('SettleUp')} />
+      <BalanceHero totals={totals} currency={myCurrency} onSettleUp={() => navigation.navigate('SettleUp')} />
 
       {/* Things waiting on me */}
       {todo > 0 ? (
         <>
-          <SectionHeader title="Needs your attention" />
+          <SectionHeader title={tr('home.attention')} />
           <ListCard>
             {pending.map((s, i) => (
               <ListRow
                 key={s.id}
                 leading={<Avatar name={s.fromUser.name} />}
-                title={`${firstName(s.fromUser.name)} paid you ${formatCurrency(s.amount, s.currency)}`}
-                subtitle="Confirm you got it"
+                title={tr('home.paidYouAmount', { name: firstName(s.fromUser.name), amount: formatCurrency(s.amount, s.currency) })}
+                subtitle={tr('home.confirmYouGotIt')}
                 chevron
                 divider={i < todo - 1}
                 onPress={() => navigation.navigate('SettlementDetail', { settlementId: s.id })}
@@ -97,8 +101,8 @@ const HomeScreen: React.FC = () => {
               <ListRow
                 key={r.id}
                 leading={<Avatar name={r.fromUser.name} uri={r.fromUser.avatarUrl} />}
-                title={`${firstName(r.fromUser.name)} sent a reminder`}
-                subtitle={r.amount ? `About ${formatCurrency(r.amount)}` : 'Settle up when you can'}
+                title={tr('home.sentReminder', { name: firstName(r.fromUser.name) })}
+                subtitle={r.amount ? tr('home.about', { amount: formatCurrency(r.amount, r.currency ?? myCurrency) }) : tr('home.settleWhenYouCan')}
                 divider={pending.length + i < todo - 1}
                 trailing={
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -106,10 +110,10 @@ const HomeScreen: React.FC = () => {
                       icon="close"
                       variant="ghost"
                       size={36}
-                      accessibilityLabel="Dismiss reminder"
+                      accessibilityLabel={tr('home.dismissReminder')}
                       onPress={() => dismissReminder.mutate(r.id)}
                     />
-                    <Button title="Settle" size="sm" onPress={() => navigation.navigate('SettleUp', { userId: r.fromUser.id })} />
+                    <Button title={tr('home.settle')} size="sm" onPress={() => navigation.navigate('SettleUp', { userId: r.fromUser.id, currency: r.currency })} />
                   </View>
                 }
               />
@@ -119,9 +123,9 @@ const HomeScreen: React.FC = () => {
                 key={r.id}
                 leading={<Avatar name={r.friendUser.name} />}
                 title={firstName(r.friendUser.name)}
-                subtitle="Wants to be friends"
+                subtitle={tr('friends.wantsToBeFriends')}
                 divider={pending.length + reminders.length + i < todo - 1}
-                trailing={<Button title="Accept" size="sm" onPress={() => accept.mutate(r.id)} loading={accept.isPending && accept.variables === r.id} />}
+                trailing={<Button title={tr('common.accept')} size="sm" onPress={() => accept.mutate(r.id)} loading={accept.isPending && accept.variables === r.id} />}
               />
             ))}
             {contactsRow ? (
@@ -133,12 +137,12 @@ const HomeScreen: React.FC = () => {
                 }
                 title={
                   newOnWhoOwes.length === 0
-                    ? 'Find friends from your contacts'
+                    ? tr('home.findFromContacts')
                     : newOnWhoOwes.length === 1
-                      ? `${firstName(newOnWhoOwes[0].contactName)} is on WhoOwes`
-                      : `${newOnWhoOwes.length} contacts are on WhoOwes`
+                      ? tr('home.contactOnWhoOwes', { name: firstName(newOnWhoOwes[0].contactName) })
+                      : tr('home.contactsOnWhoOwes', { count: newOnWhoOwes.length })
                 }
-                subtitle={newOnWhoOwes.length === 0 ? 'See who’s already here' : 'Add them as friends'}
+                subtitle={newOnWhoOwes.length === 0 ? tr('home.seeWhosHere') : tr('home.addThemAsFriends')}
                 chevron
                 onPress={() => navigation.navigate('FindFriends')}
               />
@@ -148,27 +152,29 @@ const HomeScreen: React.FC = () => {
       ) : null}
 
       {/* People balances */}
-      <SectionHeader title="Balances" action={balances.length > 4 ? 'See all' : undefined} onAction={() => navigation.navigate('Main', { screen: 'Friends' })} />
+      <SectionHeader title={tr('home.balances')} action={balances.length > 4 ? tr('common.seeAll') : undefined} onAction={() => navigation.navigate('Main', { screen: 'Friends' })} />
       {balancesQ.isLoading ? (
         <SkeletonList rows={3} />
       ) : balances.length === 0 ? (
         <Card variant="alt">
-          <Text tone="secondary">You’re settled up with everyone.</Text>
+          <Text tone="secondary">{tr('home.settledWithEveryone')}</Text>
         </Card>
       ) : (
         <ListCard>
           {balances.slice(0, 4).map((b, i, arr) => {
             const owesMe = b.netBalance > 0;
+            const direction = owesMe ? tr('balance.owesYou') : tr('balance.youOwe');
+            const amount = formatCurrency(Math.abs(b.netBalance), b.currency);
             return (
               <ListRow
-                key={b.userId}
+                key={`${b.userId}|${b.currency}`}
                 leading={<Avatar name={b.user.name} uri={b.user.avatarUrl} />}
                 title={b.user.name}
-                subtitle={owesMe ? 'owes you' : 'you owe'}
+                subtitle={direction}
                 divider={i < arr.length - 1}
-                accessibilityLabel={`${b.user.name}, ${owesMe ? 'owes you' : 'you owe'} ${formatCurrency(Math.abs(b.netBalance))}`}
+                accessibilityLabel={`${b.user.name}, ${direction} ${amount}`}
                 onPress={() => navigation.navigate('FriendDetail', { friendId: b.userId })}
-                trailing={<RowAmount amount={formatCurrency(Math.abs(b.netBalance))} tone={owesMe ? 'positive' : 'negative'} />}
+                trailing={<RowAmount amount={amount} tone={owesMe ? 'positive' : 'negative'} />}
               />
             );
           })}
@@ -176,11 +182,11 @@ const HomeScreen: React.FC = () => {
       )}
 
       {/* Recent activity */}
-      <SectionHeader title="Recent" action="See all" onAction={() => navigation.navigate('Main', { screen: 'Activity' })} />
+      <SectionHeader title={tr('home.recent')} action={tr('common.seeAll')} onAction={() => navigation.navigate('Main', { screen: 'Activity' })} />
       {activity.isLoading ? (
         <SkeletonList rows={3} />
       ) : activity.items.length === 0 ? (
-        <EmptyState emoji="🧾" title="Nothing here yet" body="Add your first shared expense and it will show up here." actionLabel="Add expense" onAction={() => openAddSheet()} />
+        <EmptyState emoji="🧾" title={tr('home.empty.title')} body={tr('home.empty.body')} actionLabel={tr('common.addExpense')} onAction={() => openAddSheet()} />
       ) : (
         <ListCard>
           {activity.items.slice(0, 4).map((item, i, arr) =>

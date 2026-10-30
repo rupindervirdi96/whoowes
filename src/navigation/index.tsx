@@ -10,6 +10,8 @@ import { StatusBar } from 'expo-status-bar';
 import { RootStackParamList } from '../types/navigation';
 import { useAuthStore } from '../store/authStore';
 import { useStoreIdentity } from '../hooks/useBilling';
+import { useEnsureCurrency } from '../hooks/useCurrency';
+import { useT } from '../i18n';
 import { useTheme } from '../theme';
 import AuthNavigator from './AuthNavigator';
 import MainTabs from './MainTabs';
@@ -35,8 +37,10 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const RootNavigator: React.FC = () => {
   const t = useTheme();
+  const { t: tr } = useT();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   useStoreIdentity();
+  useEnsureCurrency();
 
   const navTheme = useMemo<NavTheme>(() => {
     const base = t.isDark ? DarkTheme : DefaultTheme;
@@ -80,21 +84,21 @@ const RootNavigator: React.FC = () => {
 
             <Stack.Screen name="FriendDetail" component={FriendDetailScreen} options={{ title: '' }} />
             <Stack.Screen name="GroupDetail" component={GroupDetailScreen} options={{ title: '' }} />
-            <Stack.Screen name="ExpenseDetail" component={ExpenseDetailScreen} options={{ title: 'Expense' }} />
-            <Stack.Screen name="Settlements" component={SettlementsScreen} options={{ title: 'Payments' }} />
-            <Stack.Screen name="SettlementDetail" component={SettlementDetailScreen} options={{ title: 'Payment' }} />
-            <Stack.Screen name="Account" component={AccountScreen} options={{ title: 'Account' }} />
-            <Stack.Screen name="FindFriends" component={FindFriendsScreen} options={{ title: 'Friends from contacts' }} />
-            <Stack.Screen name="Insights" component={InsightsScreen} options={{ title: 'Insights' }} />
-            <Stack.Screen name="ReceiptReview" component={ReceiptReviewScreen} options={{ title: 'Review receipt' }} />
+            <Stack.Screen name="ExpenseDetail" component={ExpenseDetailScreen} options={{ title: tr('nav.expense') }} />
+            <Stack.Screen name="Settlements" component={SettlementsScreen} options={{ title: tr('friend.payments') }} />
+            <Stack.Screen name="SettlementDetail" component={SettlementDetailScreen} options={{ title: tr('nav.payment') }} />
+            <Stack.Screen name="Account" component={AccountScreen} options={{ title: tr('nav.account') }} />
+            <Stack.Screen name="FindFriends" component={FindFriendsScreen} options={{ title: tr('nav.findFriends') }} />
+            <Stack.Screen name="Insights" component={InsightsScreen} options={{ title: tr('nav.insights') }} />
+            <Stack.Screen name="ReceiptReview" component={ReceiptReviewScreen} options={{ title: tr('nav.reviewReceipt') }} />
 
             <Stack.Group screenOptions={modal}>
-              <Stack.Screen name="AddFriend" component={AddFriendScreen} options={{ title: 'Add a friend' }} />
-              <Stack.Screen name="CreateGroup" component={CreateGroupScreen} options={{ title: 'New group' }} />
-              <Stack.Screen name="ManualExpense" component={ManualExpenseScreen} options={{ title: 'Add expense' }} />
-              <Stack.Screen name="QuickAdd" component={QuickAddScreen} options={{ title: 'Quick Add' }} />
-              <Stack.Screen name="ReceiptScan" component={ReceiptScanScreen} options={{ title: 'Scan receipt' }} />
-              <Stack.Screen name="SettleUp" component={SettleUpScreen} options={{ title: 'Settle up' }} />
+              <Stack.Screen name="AddFriend" component={AddFriendScreen} options={{ title: tr('friends.addFriend') }} />
+              <Stack.Screen name="CreateGroup" component={CreateGroupScreen} options={{ title: tr('createGroup.newGroup') }} />
+              <Stack.Screen name="ManualExpense" component={ManualExpenseScreen} options={{ title: tr('common.addExpense') }} />
+              <Stack.Screen name="QuickAdd" component={QuickAddScreen} options={{ title: tr('nav.quickAdd') }} />
+              <Stack.Screen name="ReceiptScan" component={ReceiptScanScreen} options={{ title: tr('nav.scanReceipt') }} />
+              <Stack.Screen name="SettleUp" component={SettleUpScreen} options={{ title: tr('hero.settleUp') }} />
               <Stack.Screen name="Plans" component={PlansScreen} options={{ headerShown: false }} />
             </Stack.Group>
           </>

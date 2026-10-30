@@ -20,6 +20,7 @@ import ActivityScreen from '../screens/activity/ActivityScreen';
 import AddSheet from '../components/AddSheet';
 import Text from '../components/ui/Text';
 import Icon from '../components/ui/Icon';
+import { useT } from '../i18n';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -35,6 +36,7 @@ const Placeholder = () => null;
 
 function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const t = useTheme();
+  const { t: tr } = useT();
   const insets = useSafeAreaInsets();
   const openAddSheet = useUIStore((s) => s.openAddSheet);
   const { data: pending } = usePendingSettlements();
@@ -66,7 +68,7 @@ function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             <View key={route.key} style={{ flex: 1, alignItems: 'center' }}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Add expense"
+                accessibilityLabel={tr('common.addExpense')}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
                   openAddSheet();
@@ -99,7 +101,7 @@ function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             key={route.key}
             accessibilityRole="tab"
             accessibilityState={{ selected: focused }}
-            accessibilityLabel={badge ? `${label}, ${badge} new` : label}
+            accessibilityLabel={badge ? tr('tab.withBadge', { label, count: badge }) : label}
             onPress={() => {
               const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
               if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
@@ -139,17 +141,20 @@ function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   );
 }
 
-const MainTabs: React.FC = () => (
-  <>
-    <Tab.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Home' }} />
-      <Tab.Screen name="Friends" component={FriendsScreen} options={{ title: 'Friends' }} />
-      <Tab.Screen name="Add" component={Placeholder} options={{ title: 'Add' }} />
-      <Tab.Screen name="Groups" component={GroupsScreen} options={{ title: 'Groups' }} />
-      <Tab.Screen name="Activity" component={ActivityScreen} options={{ title: 'Activity' }} />
-    </Tab.Navigator>
-    <AddSheet />
-  </>
-);
+const MainTabs: React.FC = () => {
+  const { t: tr } = useT();
+  return (
+    <>
+      <Tab.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
+        <Tab.Screen name="Home" component={HomeScreen} options={{ title: tr('tab.home') }} />
+        <Tab.Screen name="Friends" component={FriendsScreen} options={{ title: tr('tab.friends') }} />
+        <Tab.Screen name="Add" component={Placeholder} options={{ title: tr('add.title') }} />
+        <Tab.Screen name="Groups" component={GroupsScreen} options={{ title: tr('tab.groups') }} />
+        <Tab.Screen name="Activity" component={ActivityScreen} options={{ title: tr('tab.activity') }} />
+      </Tab.Navigator>
+      <AddSheet />
+    </>
+  );
+};
 
 export default MainTabs;

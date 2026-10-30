@@ -3,7 +3,8 @@
  *
  *   GET    /groups                          my groups
  *   GET    /groups/:id                      (members only)
- *   POST   /groups                          { name, description?, memberIds[] }  (members must be my friends)
+ *   POST   /groups                          { name, description?, memberIds[], currency? }  (members must be my friends)
+ *   PATCH  /groups/:id                      { name?, description?, currency? }  (any member)
  *   POST   /groups/:id/members              { userId }   (any member can add their friends)
  *   DELETE /groups/:id/members/:userId      (admins remove anyone; anyone can leave)
  *   DELETE /groups/:id                      (admins only; expenses stay, unlinked)
@@ -18,6 +19,9 @@
  *   GET    /settlements/pending             waiting for me to confirm
  *   GET    /settlements/:id
  *   POST   /settlements                     { toUserId, amount, currency?, note?, groupId? }
+ *
+ * Amounts are kept per currency and never converted: an expense or payment
+ * without a currency uses the group's currency, then the user's, then USD.
  *   POST   /settlements/:id/respond         { action: confirm | reject }  (recipient only)
  *   DELETE /settlements/:id                 (sender, while pending)
  *
@@ -32,13 +36,28 @@ import { requireUser } from '../auth.js';
 import { db, type ExpenseDoc, type ReceiptDoc, type SettlementDoc } from '../db/index.js';
 import { areFriends, canTransactWith, fail, isGroupMember, iso, myGroupIds, route, toCents } from '../domain/common.js';
 import { loadGroups, serializeExpenses, serializeSettlements } from '../domain/serialize.js';
+import { FALLBACK_CURRENCY, currencyCode } from '../currency.js';
 
 export const moneyRouter = Router();
 moneyRouter.use(requireUser);
 
 const CATEGORIES = ['food', 'transport', 'accommodation', 'entertainment', 'utilities', 'shopping', 'health', 'other'] as const;
-const currency = z.string().regex(/^[A-Z]{3}$/).default('USD');
 const money = z.number().positive().max(10_000_000);
+
+/** The user's preferred currency. */
+async function userCurrency(userId: string) {
+  const u = await db.users.findOne({ _id: userId }, { projection: { currency: 1 } });
+  return u?.currency ?? FALLBACK_CURRENCY;
+}
+
+/** Currency for a new expense or payment that didn't name one. */
+async function defaultCurrency(userId: string, groupId?: string) {
+  if (groupId) {
+    const g = await db.groups.findOne({ _id: groupId }, { projection: { currency: 1 } });
+    if (g?.currency) return g.currency;
+  }
+  return userCurrency(userId);
+}
 
 async function requireMember(groupId: string, userId: string) {
   if (!(await isGroupMember(groupId, userId))) fail(404, 'Group not found.');
@@ -75,7 +94,12 @@ moneyRouter.post(
   route(async (req, res) => {
     const me = req.user!.id;
     const body = z
-      .object({ name: z.string().trim().min(1).max(60), description: z.string().trim().max(200).optional(), memberIds: z.array(z.string()).max(100) })
+      .object({
+        name: z.string().trim().min(1).max(60),
+        description: z.string().trim().max(200).optional(),
+        memberIds: z.array(z.string()).max(100),
+        currency: currencyCode.optional(),
+      })
       .parse(req.body);
     const memberIds = [...new Set(body.memberIds.filter((id) => id !== me))];
     for (const id of memberIds) if (!(await areFriends(me, id))) fail(403, 'You can only add friends to a group.');
@@ -87,10 +111,33 @@ moneyRouter.post(
       description: body.description || null,
       createdBy: me,
       members: [{ userId: me, role: 'admin', joinedAt: now }, ...memberIds.map((uid) => ({ userId: uid, role: 'member' as const, joinedAt: now }))],
+      currency: body.currency ?? (await userCurrency(me)),
       createdAt: now,
       updatedAt: now,
     });
     res.status(201).json((await loadGroups([id], me))[0]);
+  }),
+);
+
+moneyRouter.patch(
+  '/groups/:id',
+  route(async (req, res) => {
+    const me = req.user!.id;
+    const groupId = String(req.params.id);
+    const body = z
+      .object({
+        name: z.string().trim().min(1).max(60).optional(),
+        description: z.string().trim().max(200).optional(),
+        currency: currencyCode.optional(),
+      })
+      .parse(req.body);
+    await requireMember(groupId, me);
+    const set: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.name !== undefined) set.name = body.name;
+    if (body.description !== undefined) set.description = body.description || null;
+    if (body.currency !== undefined) set.currency = body.currency; // only affects new expenses
+    await db.groups.updateOne({ _id: groupId }, { $set: set });
+    res.json((await loadGroups([groupId], me))[0]);
   }),
 );
 
@@ -188,7 +235,7 @@ moneyRouter.post(
         title: z.string().trim().min(1).max(120),
         description: z.string().trim().max(1000).optional(),
         amount: money,
-        currency,
+        currency: currencyCode.optional(),
         category: z.enum(CATEGORIES),
         paidBy: z.string(),
         splitType: z.enum(['equal', 'custom', 'percentage', 'item_based']),
@@ -233,7 +280,7 @@ moneyRouter.post(
       title: body.title,
       description: body.description ?? null,
       amountCents: total,
-      currency: body.currency,
+      currency: body.currency ?? (await defaultCurrency(me, body.groupId)),
       category: body.category,
       paidBy: body.paidBy,
       splitType: body.splitType,
@@ -331,7 +378,7 @@ moneyRouter.post(
       .object({
         toUserId: z.string(),
         amount: money,
-        currency,
+        currency: currencyCode.optional(),
         note: z.string().trim().max(200).optional(),
         groupId: z.string().optional(),
         expenseIds: z.array(z.string()).max(200).optional(),
@@ -350,7 +397,7 @@ moneyRouter.post(
       fromUserId: me,
       toUserId: body.toUserId,
       amountCents: toCents(body.amount),
-      currency: body.currency,
+      currency: body.currency ?? (await defaultCurrency(me, body.groupId)),
       note: body.note || null,
       status: 'pending',
       groupId: body.groupId ?? null,
@@ -373,7 +420,7 @@ moneyRouter.post(
     const { action } = z.object({ action: z.enum(['confirm', 'reject']) }).parse(req.body);
     const s = await getMySettlement(String(req.params.id), me);
     if (s.toUserId !== me) fail(403, 'Only the person being paid can confirm this.');
-    if (s.status !== 'pending') fail(409, `This payment is already ${s.status}.`);
+    if (s.status !== 'pending') fail(409, s.status === 'confirmed' ? 'This payment is already confirmed.' : 'This payment was already declined.');
     const now = new Date();
     const confirmed = action === 'confirm';
     const row = await db.settlements.findOneAndUpdate(

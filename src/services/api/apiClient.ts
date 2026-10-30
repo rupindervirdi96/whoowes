@@ -7,6 +7,7 @@ import axios, { AxiosError } from 'axios';
 import { API_TIMEOUT_MS, API_URL } from '../../config';
 import { useAuthStore } from '../../store/authStore';
 import { ApiError } from '../../types';
+import { currentLanguage, translate } from '../../i18n';
 
 const apiClient = axios.create({
   baseURL: API_URL,
@@ -17,6 +18,8 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   const { token } = useAuthStore.getState();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // The server answers errors, AI notes and sign-in texts in this language.
+  config.headers['Accept-Language'] = currentLanguage();
   return config;
 });
 
@@ -24,7 +27,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     const apiError: ApiError = {
-      message: 'Something went wrong. Please try again.',
+      message: translate('error.generic'),
       statusCode: error.response?.status ?? 0,
     };
     // Expired or revoked session: sign out so the app returns to the phone screen.
@@ -37,9 +40,9 @@ apiClient.interceptors.response.use(
       if (typeof data.code === 'string') apiError.code = data.code;
       if (typeof data.feature === 'string') apiError.feature = data.feature as ApiError['feature'];
     } else if (error.code === 'ECONNABORTED') {
-      apiError.message = 'That took too long. Check your connection and try again.';
+      apiError.message = translate('error.timeout');
     } else if (!error.response) {
-      apiError.message = "Can't reach WhoOwes right now. Check your connection.";
+      apiError.message = translate('error.offline');
     }
     return Promise.reject(apiError);
   },

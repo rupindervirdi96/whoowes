@@ -14,7 +14,7 @@ import { env } from '../env.js';
 
 export const legalRouter = Router();
 
-const UPDATED = 'October 27, 2026';
+const UPDATED = 'October 30, 2026';
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -76,6 +76,16 @@ legalRouter.get('/privacy', (_req, res) => {
   <li><strong>Receipts and Quick Add text.</strong> When you scan a receipt, the photo or PDF is sent to our AI provider to read the items and prices. We keep the items it read, not the photo. When you use Quick Add, we keep the text you typed.</li>
   <li><strong>Subscription status</strong>: which plan you have and when it renews. Card and bank details are handled by Google Play (or Apple, or Stripe on the web) and never reach us.</li>
   <li><strong>How many AI scans you used</strong> this month, to apply your plan's limits.</li>
+  <li><strong>Your preferred currency</strong>, first set from your phone's region. The app's language is sent with each request so messages and AI notes come back in that language; we don't store it.</li>
+</ul>
+
+<h2>Why we use it (legal bases)</h2>
+<p>If you live in the European Economic Area, the United Kingdom or Switzerland, these are the legal grounds we rely on:</p>
+<ul>
+  <li><strong>To provide the app you signed up for</strong> (performance of a contract): your account, sign-in, expenses, groups, payments, reminders, receipt reading and subscriptions.</li>
+  <li><strong>Legitimate interests</strong>: keeping the service secure, preventing abuse such as fake sign-ups and text-message fraud, and fixing problems.</li>
+  <li><strong>Your consent</strong>: checking your contacts, which you can stop at any time by turning off contacts access for WhoOwes in your phone's settings.</li>
+  <li><strong>Legal obligations</strong>: keeping billing records as tax and accounting rules require.</li>
 </ul>
 
 <h2>Contacts</h2>
@@ -99,6 +109,9 @@ legalRouter.get('/privacy', (_req, res) => {
 </ul>
 <p>Your information is stored in the United States. All connections are encrypted (HTTPS).</p>
 
+<h2>International transfers</h2>
+<p>If you use WhoOwes from outside the United States, your information is transferred to and processed in the United States. Where the law requires it (for example for transfers from the EEA, the UK or Switzerland), we and our providers rely on recognised safeguards such as the European Commission's Standard Contractual Clauses and the EU-U.S. Data Privacy Framework.</p>
+
 <h2>What other people see</h2>
 <p>Friends and people in your groups see your name and the expenses and payments you share with them. People can find you by your exact phone number or email address, or by name if you're in a group together.</p>
 
@@ -108,11 +121,23 @@ legalRouter.get('/privacy', (_req, res) => {
 <h2>Deleting your account</h2>
 <p>In the app, open <strong>Account → Delete account</strong>. You can also ask us by email. See <a href="/delete-account">how to delete your account</a>.</p>
 
+<h2>Your rights</h2>
+<p>Depending on where you live (for example under the GDPR in Europe and the UK, PIPEDA and Quebec's Law 25 in Canada, the DPDP Act in India, the LGPD in Brazil, or California's CCPA), you can ask us to:</p>
+<ul>
+  <li>give you a copy of your information, including in a portable format;</li>
+  <li>correct it (you can change your name and email in the app yourself);</li>
+  <li>delete it;</li>
+  <li>restrict or object to how we use it;</li>
+  <li>withdraw consent you gave, such as contacts access, at any time.</li>
+</ul>
+<p>Email us at the address below and we'll answer within 30 days. We may need to confirm the request comes from your phone number. If you're unhappy with our answer, you can complain to your local data protection authority. We never sell personal information, and we don't "share" it for cross-context advertising.</p>
+
 <h2>Children</h2>
 <p>WhoOwes is meant for adults and isn't directed at children.</p>
 
 <h2>Changes</h2>
 <p>If we change this policy, we'll update the date at the top and, for significant changes, tell you in the app.</p>
+<p>The app is available in English, French, Spanish and Hindi. This policy is written in English; if a translation is ever provided and differs, the English version applies.</p>
 
 <h2>Contact</h2>
 <p>Questions or requests: ${contact()}</p>`,

@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "icons": "node scripts/generate-icons.mjs",
     "server:dev": "npm --prefix server run dev",
-    "store-assets": "node scripts/generate-store-assets.mjs"
+    "store-assets": "node scripts/generate-store-assets.mjs",
+    "locale-data": "node scripts/generate-locale-data.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",

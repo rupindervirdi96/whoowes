@@ -21,6 +21,7 @@ import type {
   Reminder,
   RespondSettlementPayload,
   Settlement,
+  UpdateGroupPayload,
   User,
 } from '../../types';
 import { toE164 } from '../../utils/phone';
@@ -43,8 +44,8 @@ export const LiveAuthService = {
   async logout() {
     // Sessions are stateless tokens; dropping it on the device signs you out.
   },
-  updateProfile: (_current: User, update: Partial<Pick<User, 'name' | 'phone' | 'avatarUrl' | 'email'>>) =>
-    patch<User>('/me', { name: update.name, email: update.email, avatarUrl: update.avatarUrl }),
+  updateProfile: (_current: User, update: Partial<Pick<User, 'name' | 'phone' | 'avatarUrl' | 'email' | 'currency'>>) =>
+    patch<User>('/me', { name: update.name, email: update.email, avatarUrl: update.avatarUrl, currency: update.currency }),
   deleteAccount: () => del('/me'),
 };
 
@@ -63,7 +64,8 @@ export const LiveFriendService = {
     const q = /^[\d\s()+-]{7,}$/.test(query.trim()) ? (toE164(query) ?? query) : query.trim();
     return get<User[]>('/users/search', { q });
   },
-  remind: (friendUserId: string, amount?: number) => post<void>(`/friends/${friendUserId}/remind`, { amount }),
+  remind: (friendUserId: string, amount?: number, currency?: string) =>
+    post<void>(`/friends/${friendUserId}/remind`, amount ? { amount, currency } : {}),
 };
 
 export const LiveReminderService = {
@@ -75,6 +77,7 @@ export const LiveGroupService = {
   getGroups: (_userId: string) => get<Group[]>('/groups'),
   getGroup: (groupId: string) => get<Group>(`/groups/${groupId}`),
   createGroup: (_userId: string, payload: CreateGroupPayload) => post<Group>('/groups', payload),
+  updateGroup: (groupId: string, payload: UpdateGroupPayload) => patch<Group>(`/groups/${groupId}`, payload),
   addMember: (groupId: string, newUserId: string) => post<Group>(`/groups/${groupId}/members`, { userId: newUserId }),
   removeMember: async (groupId: string, memberUserId: string) =>
     (await apiClient.delete<Group>(`/groups/${groupId}/members/${memberUserId}`)).data,

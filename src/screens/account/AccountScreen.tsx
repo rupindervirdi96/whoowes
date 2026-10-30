@@ -6,7 +6,11 @@ import { useCurrentUser, useDeleteAccount, useLogout, useUpdateProfile } from '.
 import { formatPhone } from '../../utils/phone';
 import { useEntitlements, useManageSubscription, useResetDemoPlan } from '../../hooks/useBilling';
 import { useShowModal, useUIStore, ThemePreference } from '../../store/uiStore';
-import { PLANS } from '../../billing/plans';
+import { planName } from '../../billing/plans';
+import { LANGUAGES, deviceLanguage, useLanguageStore, useT } from '../../i18n';
+import { useMyCurrency, useSetMyCurrency } from '../../hooks/useCurrency';
+import { currencyName } from '../../utils/currency';
+import CurrencyPicker from '../../components/CurrencyPicker';
 import { APP_VERSION } from '../../constants';
 import { LEGAL_URLS, USE_MOCK_API } from '../../config';
 import { formatShortDate } from '../../utils/date';
@@ -25,7 +29,14 @@ import { LogoMark } from '../../components/ui/Logo';
 
 const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => {
   const t = useTheme();
+  const { t: tr, lang } = useT();
   const user = useCurrentUser()!;
+  const myCurrency = useMyCurrency();
+  const setMyCurrency = useSetMyCurrency();
+  const languagePref = useLanguageStore((s) => s.preference);
+  const setLanguagePref = useLanguageStore((s) => s.setPreference);
+  const [languageOpen, setLanguageOpen] = useState(false);
+  const [currencyOpen, setCurrencyOpen] = useState(false);
   const logout = useLogout();
   const update = useUpdateProfile();
   const deleteAccount = useDeleteAccount();
@@ -41,7 +52,11 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
   const [email, setEmail] = useState(user.email ?? '');
 
   const storeBilled = !!subscription?.provider && subscription.provider !== 'stripe';
-  const storeName = subscription?.provider === 'app_store' ? 'the App Store' : 'Google Play';
+  const storeName = subscription?.provider === 'app_store' ? tr('store.appStore') : tr('store.googlePlay');
+  const currentPlan = planName(plan);
+  const languageLabel = languagePref === 'system'
+    ? tr('account.languageSystem', { language: LANGUAGES.find((l) => l.code === deviceLanguage())!.native })
+    : LANGUAGES.find((l) => l.code === languagePref)!.native;
   const used = subscription?.scansUsed ?? 0;
   const limit = subscription?.scansLimit;
 
@@ -53,7 +68,7 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
           {user.name}
         </Text>
         <Text tone="tertiary">{user.phone ? formatPhone(user.phone) : user.email}</Text>
-        <Button title="Edit profile" icon="edit" variant="ghost" size="sm" onPress={() => setEditing(true)} style={{ marginTop: 6 }} />
+        <Button title={tr('account.editProfile')} icon="edit" variant="ghost" size="sm" onPress={() => setEditing(true)} style={{ marginTop: 6 }} />
       </View>
 
       {/* Plan */}
@@ -64,34 +79,36 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
           </View>
           <View style={{ flex: 1 }}>
             <Text variant="overline" tone="tertiary">
-              Your plan
+              {tr('account.yourPlan')}
             </Text>
-            <Text variant="h3">WhoOwes {PLANS[plan].name}</Text>
+            <Text variant="h3">WhoOwes {currentPlan}</Text>
           </View>
-          {subscription?.isDemo ? <Badge label="Demo" tone="info" /> : null}
+          {subscription?.isDemo ? <Badge label={tr('account.demo')} tone="info" /> : null}
         </View>
 
         {subscription?.status === 'past_due' ? (
           <Text variant="caption" tone="negative" style={{ marginTop: 10 }}>
             {storeBilled
-              ? `Your last payment failed — update your payment method in ${storeName} to keep ${PLANS[plan].name}.`
-              : `Your last payment failed — update your card to keep ${PLANS[plan].name}.`}
+              ? tr('account.pastDueStore', { store: storeName, plan: currentPlan })
+              : tr('account.pastDueCard', { plan: currentPlan })}
           </Text>
         ) : null}
         {isPaid && subscription?.currentPeriodEnd ? (
           <Text variant="caption" tone="tertiary" style={{ marginTop: 10 }}>
-            {subscription.cancelAtPeriodEnd ? 'Ends' : subscription.status === 'trialing' ? 'Trial ends' : 'Renews'} {formatShortDate(subscription.currentPeriodEnd)}
-            {subscription.interval ? ` · billed ${subscription.interval === 'year' ? 'yearly' : 'monthly'}` : ''}
+            {tr(subscription.cancelAtPeriodEnd ? 'account.ends' : subscription.status === 'trialing' ? 'account.trialEnds' : 'account.renews', {
+              date: formatShortDate(subscription.currentPeriodEnd),
+            })}
+            {subscription.interval ? ` · ${tr(subscription.interval === 'year' ? 'account.billedYearly' : 'account.billedMonthly')}` : ''}
           </Text>
         ) : null}
 
         <View style={{ marginTop: 14 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
             <Text variant="caption" tone="secondary">
-              AI receipt scans this month
+              {tr('account.scansThisMonth')}
             </Text>
             <Text variant="caption" weight="bold">
-              {limit == null ? `${used} · unlimited` : `${used} / ${limit}`}
+              {limit == null ? `${used} · ${tr('account.unlimited')}` : `${used} / ${limit}`}
             </Text>
           </View>
           <View style={{ height: 6, borderRadius: 3, backgroundColor: t.colors.surfaceAlt, overflow: 'hidden' }}>
@@ -107,10 +124,14 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
         </View>
 
         <View style={{ flexDirection: 'row', gap: 10, marginTop: t.spacing.base }}>
-          {plan !== 'pro' ? <Button title={isPaid ? 'Upgrade to Pro' : 'See plans'} variant="pro" style={{ flex: 1 }} onPress={() => navigation.navigate('Plans')} /> : null}
+          {plan !== 'pro' ? <Button title={isPaid ? tr('account.upgradePro') : tr('common.seePlans')} variant="pro" style={{ flex: 1 }} onPress={() => navigation.navigate('Plans')} /> : null}
           {isPaid ? (
             <Button
-              title={subscription?.isDemo ? (subscription.cancelAtPeriodEnd ? 'Resume' : 'Cancel') : storeBilled ? 'Manage subscription' : 'Manage billing'}
+              title={
+                subscription?.isDemo
+                  ? tr(subscription.cancelAtPeriodEnd ? 'account.resume' : 'common.cancel')
+                  : tr(storeBilled ? 'account.manageSubscription' : 'account.manageBilling')
+              }
               variant="secondary"
               style={{ flex: 1 }}
               loading={manage.isPending}
@@ -119,42 +140,75 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
           ) : null}
         </View>
         {subscription?.isDemo && isPaid ? (
-          <Button title="Reset demo to Free" variant="ghost" size="sm" onPress={() => resetDemo.mutate()} style={{ marginTop: 6 }} />
+          <Button title={tr('account.resetDemo')} variant="ghost" size="sm" onPress={() => resetDemo.mutate()} style={{ marginTop: 6 }} />
         ) : null}
       </Card>
 
-      <SectionHeader title="Appearance" />
+      <SectionHeader title={tr('account.preferences')} />
+      <Card padding={4} style={{ paddingHorizontal: 12 }}>
+        <ListRow
+          leading={<Icon name="translate" color={t.colors.primary} />}
+          title={tr('account.language')}
+          trailing={<Text tone="secondary">{languageLabel}</Text>}
+          chevron
+          divider
+          onPress={() => setLanguageOpen(true)}
+        />
+        <ListRow
+          leading={<Icon name="payments" color={t.colors.primary} />}
+          title={tr('account.currency')}
+          subtitle={currencyName(myCurrency, lang)}
+          trailing={<Text tone="secondary">{myCurrency}</Text>}
+          chevron
+          onPress={() => setCurrencyOpen(true)}
+        />
+      </Card>
+      <Text variant="caption" tone="tertiary" style={{ marginTop: 8, marginHorizontal: 4 }}>
+        {tr('account.currencyHint')}
+      </Text>
+
+      <SectionHeader title={tr('account.appearance')} />
       <SegmentedControl<ThemePreference>
         value={themePref}
         onChange={setThemePref}
         options={[
-          { value: 'system', label: 'System' },
-          { value: 'light', label: 'Light' },
-          { value: 'dark', label: 'Dark' },
+          { value: 'system', label: tr('account.themeSystem') },
+          { value: 'light', label: tr('account.themeLight') },
+          { value: 'dark', label: tr('account.themeDark') },
         ]}
       />
 
-      <SectionHeader title="Money" />
+      <SectionHeader title={tr('account.money')} />
       <Card padding={4} style={{ paddingHorizontal: 12 }}>
-        <ListRow leading={<Icon name="insights" color={t.colors.primary} />} title="Spending insights" chevron divider onPress={() => navigation.navigate('Insights')} />
-        <ListRow leading={<Icon name="account-balance-wallet" color={t.colors.primary} />} title="Payments" chevron onPress={() => navigation.navigate('Settlements')} />
+        <ListRow leading={<Icon name="insights" color={t.colors.primary} />} title={tr('account.insights')} chevron divider onPress={() => navigation.navigate('Insights')} />
+        <ListRow leading={<Icon name="account-balance-wallet" color={t.colors.primary} />} title={tr('friend.payments')} chevron onPress={() => navigation.navigate('Settlements')} />
       </Card>
 
-      <SectionHeader title="About" />
+      <SectionHeader title={tr('account.about')} />
       <Card padding={4} style={{ paddingHorizontal: 12 }}>
-        <ListRow leading={<LogoMark size={28} />} title="WhoOwes" subtitle={`Version ${APP_VERSION}`} divider />
-        <ListRow leading={<Icon name="phone-iphone" color={t.colors.textSecondary} />} title="Phone" trailing={<Text tone="secondary">{user.phone ? formatPhone(user.phone) : 'Not set'}</Text>} divider />
-        <ListRow leading={<Icon name="event" color={t.colors.textSecondary} />} title="Member since" trailing={<Text tone="secondary">{user.createdAt ? formatShortDate(user.createdAt) : '—'}</Text>} divider={!USE_MOCK_API} />
+        <ListRow leading={<LogoMark size={28} />} title="WhoOwes" subtitle={tr('account.version', { version: APP_VERSION })} divider />
+        <ListRow
+          leading={<Icon name="phone-iphone" color={t.colors.textSecondary} />}
+          title={tr('account.phone')}
+          trailing={<Text tone="secondary">{user.phone ? formatPhone(user.phone) : tr('account.notSet')}</Text>}
+          divider
+        />
+        <ListRow
+          leading={<Icon name="event" color={t.colors.textSecondary} />}
+          title={tr('account.memberSince')}
+          trailing={<Text tone="secondary">{user.createdAt ? formatShortDate(user.createdAt) : '—'}</Text>}
+          divider={!USE_MOCK_API}
+        />
         {!USE_MOCK_API ? (
           <>
-            <ListRow leading={<Icon name="privacy-tip" color={t.colors.textSecondary} />} title="Privacy policy" chevron divider onPress={() => Linking.openURL(LEGAL_URLS.privacy)} />
-            <ListRow leading={<Icon name="description" color={t.colors.textSecondary} />} title="Terms of service" chevron onPress={() => Linking.openURL(LEGAL_URLS.terms)} />
+            <ListRow leading={<Icon name="privacy-tip" color={t.colors.textSecondary} />} title={tr('legal.privacy')} chevron divider onPress={() => Linking.openURL(LEGAL_URLS.privacy)} />
+            <ListRow leading={<Icon name="description" color={t.colors.textSecondary} />} title={tr('legal.terms')} chevron onPress={() => Linking.openURL(LEGAL_URLS.terms)} />
           </>
         ) : null}
       </Card>
 
       <Button
-        title="Sign out"
+        title={tr('account.signOut')}
         icon="logout"
         variant="danger"
         fullWidth
@@ -162,41 +216,47 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
         loading={logout.isPending}
         onPress={() =>
           showModal({
-            title: 'Sign out?',
-            body: 'You can sign back in any time.',
-            confirmLabel: 'Sign out',
+            title: tr('account.signOutTitle'),
+            body: tr('account.signOutBody'),
+            confirmLabel: tr('account.signOut'),
             variant: 'danger',
             onConfirm: () => logout.mutate(),
           })
         }
       />
       <Button
-        title="Delete account"
+        title={tr('account.delete')}
         variant="ghost"
         fullWidth
         style={{ marginTop: t.spacing.sm }}
         loading={deleteAccount.isPending}
         onPress={() =>
           showModal({
-            title: 'Delete your account?',
+            title: tr('account.deleteTitle'),
             body:
-              (storeBilled && isPaid
-                ? `First cancel your subscription in ${storeName} → Subscriptions — deleting your account doesn’t stop store billing. `
-                : '') +
-              `Your profile, friends and phone number are removed${storeBilled ? '' : ' and any subscription is cancelled'}. Expenses you shared stay in other people’s history as “Deleted user”. This can’t be undone.`,
-            confirmLabel: 'Delete account',
+              (storeBilled && isPaid ? tr('account.deleteStoreFirst', { store: storeName }) + ' ' : '') +
+              tr(storeBilled ? 'account.deleteBodyStore' : 'account.deleteBody'),
+            confirmLabel: tr('account.delete'),
             variant: 'danger',
             onConfirm: () => deleteAccount.mutate(),
           })
         }
       />
 
-      <BottomSheet visible={editing} onClose={() => setEditing(false)} title="Edit profile">
-        <Input label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
-        <Input label="Email (optional)" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="you@example.com" hint="Used for receipts and billing emails" />
-        <Input label="Phone" value={user.phone ? formatPhone(user.phone) : ''} editable={false} hint="Your phone number is how you sign in" />
+      <BottomSheet visible={editing} onClose={() => setEditing(false)} title={tr('account.editProfile')}>
+        <Input label={tr('account.name')} value={name} onChangeText={setName} autoCapitalize="words" />
+        <Input
+          label={tr('account.email')}
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          placeholder="you@example.com"
+          hint={tr('account.emailHint')}
+        />
+        <Input label={tr('account.phone')} value={user.phone ? formatPhone(user.phone) : ''} editable={false} hint={tr('account.phoneHint')} />
         <Button
-          title="Save"
+          title={tr('common.save')}
           size="lg"
           fullWidth
           disabled={!name.trim()}
@@ -204,6 +264,28 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
           onPress={() => update.mutate({ name: name.trim(), email: email.trim() }, { onSuccess: () => setEditing(false) })}
         />
       </BottomSheet>
+
+      <BottomSheet visible={languageOpen} onClose={() => setLanguageOpen(false)} title={tr('account.language')}>
+        {(['system', ...LANGUAGES.map((l) => l.code)] as const).map((code) => (
+          <ListRow
+            key={code}
+            title={code === 'system' ? tr('account.languageSystem', { language: LANGUAGES.find((l) => l.code === deviceLanguage())!.native }) : LANGUAGES.find((l) => l.code === code)!.native}
+            onPress={() => {
+              setLanguagePref(code);
+              setLanguageOpen(false);
+            }}
+            trailing={languagePref === code ? <Icon name="check" color={t.colors.primary} /> : null}
+          />
+        ))}
+      </BottomSheet>
+
+      <CurrencyPicker
+        visible={currencyOpen}
+        onClose={() => setCurrencyOpen(false)}
+        value={myCurrency}
+        title={tr('account.currency')}
+        onSelect={(c) => setMyCurrency.mutate(c)}
+      />
     </Screen>
   );
 };

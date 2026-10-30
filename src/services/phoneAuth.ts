@@ -27,7 +27,7 @@ export const PhoneAuthService = {
     return { phone, ...res.data };
   },
 
-  async verify(input: { phone: string; code: string; name?: string }): Promise<AuthResponse & { isNewUser: boolean }> {
+  async verify(input: { phone: string; code: string; name?: string; currency?: string }): Promise<AuthResponse & { isNewUser: boolean }> {
     if (!USE_MOCK_API) {
       const res = await apiClient.post<AuthResponse & { isNewUser: boolean }>('/auth/phone/verify', input);
       return res.data;
@@ -42,7 +42,7 @@ export const PhoneAuthService = {
       return Promise.reject({ message: 'Tell us your name to finish signing up.', statusCode: 400, code: 'name_required' });
     }
     // Demo: a new number takes over the sample account (renamed), so the app has data to show.
-    const user: User = { ...MOCK_CURRENT_USER, name: input.name.trim(), phone: input.phone, email: '', updatedAt: nowISO() };
+    const user: User = { ...MOCK_CURRENT_USER, name: input.name.trim(), phone: input.phone, email: '', currency: input.currency, updatedAt: nowISO() };
     const idx = db.users.findIndex((u) => u.id === user.id);
     if (idx !== -1) db.users[idx] = user;
     return { user, token: `mock_token_${generateId()}`, isNewUser: true };

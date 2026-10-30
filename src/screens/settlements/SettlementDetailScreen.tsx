@@ -8,6 +8,7 @@ import { useShowModal } from '../../store/uiStore';
 import { formatCurrency } from '../../utils/currency';
 import { formatFullDate, timeAgo } from '../../utils/date';
 import { firstName } from '../../utils/money';
+import { useT } from '../../i18n';
 import Screen from '../../components/ui/Screen';
 import Text from '../../components/ui/Text';
 import Card from '../../components/ui/Card';
@@ -22,6 +23,7 @@ import EmptyState from '../../components/ui/EmptyState';
 const SettlementDetailScreen: React.FC<RootScreenProps<'SettlementDetail'>> = ({ route, navigation }) => {
   const { settlementId } = route.params;
   const t = useTheme();
+  const { t: tr } = useT();
   const me = useCurrentUser()!;
   const { data: s, isLoading } = useSettlement(settlementId);
   const respond = useRespondToSettlement();
@@ -38,7 +40,7 @@ const SettlementDetailScreen: React.FC<RootScreenProps<'SettlementDetail'>> = ({
   if (!s) {
     return (
       <Screen>
-        <EmptyState emoji="🫥" title="Payment not found" actionLabel="Go back" onAction={() => navigation.goBack()} />
+        <EmptyState emoji="🫥" title={tr('paymentDetail.notFound')} actionLabel={tr('common.goBack')} onAction={() => navigation.goBack()} />
       </Screen>
     );
   }
@@ -46,15 +48,35 @@ const SettlementDetailScreen: React.FC<RootScreenProps<'SettlementDetail'>> = ({
   const iSent = s.fromUserId === me.id;
   const iReceive = s.toUserId === me.id;
   const status = {
-    pending: { tone: 'warning' as const, label: iReceive ? 'Waiting for you to confirm' : `Waiting for ${firstName(s.toUser.name)} to confirm`, icon: 'schedule' },
-    confirmed: { tone: 'positive' as const, label: 'Confirmed', icon: 'check-circle' },
-    rejected: { tone: 'negative' as const, label: 'Declined', icon: 'cancel' },
+    pending: {
+      tone: 'warning' as const,
+      label: iReceive ? tr('paymentDetail.waitingForYou') : tr('paymentDetail.waitingFor', { name: firstName(s.toUser.name) }),
+      icon: 'schedule',
+    },
+    confirmed: { tone: 'positive' as const, label: tr('paymentDetail.confirmed'), icon: 'check-circle' },
+    rejected: { tone: 'negative' as const, label: tr('payment.declined'), icon: 'cancel' },
   }[s.status];
 
   const timeline = [
-    { label: `${iSent ? 'You' : firstName(s.fromUser.name)} recorded the payment`, date: s.initiatedAt, color: t.colors.primary },
-    s.confirmedAt ? { label: `${iReceive ? 'You' : firstName(s.toUser.name)} confirmed it`, date: s.confirmedAt, color: t.colors.positive } : null,
-    s.rejectedAt ? { label: `${iReceive ? 'You' : firstName(s.toUser.name)} declined it`, date: s.rejectedAt, color: t.colors.negative } : null,
+    {
+      label: iSent ? tr('paymentDetail.youRecorded') : tr('paymentDetail.theyRecorded', { name: firstName(s.fromUser.name) }),
+      date: s.initiatedAt,
+      color: t.colors.primary,
+    },
+    s.confirmedAt
+      ? {
+          label: iReceive ? tr('paymentDetail.youConfirmed') : tr('paymentDetail.theyConfirmed', { name: firstName(s.toUser.name) }),
+          date: s.confirmedAt,
+          color: t.colors.positive,
+        }
+      : null,
+    s.rejectedAt
+      ? {
+          label: iReceive ? tr('paymentDetail.youDeclined') : tr('paymentDetail.theyDeclined', { name: firstName(s.toUser.name) }),
+          date: s.rejectedAt,
+          color: t.colors.negative,
+        }
+      : null,
   ].filter((x): x is NonNullable<typeof x> => !!x);
 
   return (
@@ -64,21 +86,21 @@ const SettlementDetailScreen: React.FC<RootScreenProps<'SettlementDetail'>> = ({
           iReceive ? (
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <Button
-                title="Didn’t get it"
+                title={tr('paymentDetail.didntGetIt')}
                 variant="danger"
                 style={{ flex: 1 }}
                 onPress={() =>
                   showModal({
-                    title: 'Decline this payment?',
-                    body: `${firstName(s.fromUser.name)} will see that you haven’t received it.`,
-                    confirmLabel: 'Decline',
+                    title: tr('paymentDetail.declineTitle'),
+                    body: tr('paymentDetail.declineBody', { name: firstName(s.fromUser.name) }),
+                    confirmLabel: tr('paymentDetail.decline'),
                     variant: 'danger',
                     onConfirm: () => respond.mutate({ settlementId: s.id, action: 'reject' }),
                   })
                 }
               />
               <Button
-                title="Yes, I got it"
+                title={tr('paymentDetail.gotIt')}
                 icon="check"
                 style={{ flex: 1 }}
                 loading={respond.isPending}
@@ -87,16 +109,16 @@ const SettlementDetailScreen: React.FC<RootScreenProps<'SettlementDetail'>> = ({
             </View>
           ) : iSent ? (
             <Button
-              title="Cancel payment"
+              title={tr('paymentDetail.cancel')}
               variant="secondary"
               fullWidth
               loading={cancel.isPending}
               onPress={() =>
                 showModal({
-                  title: 'Cancel this payment?',
-                  body: 'It will be removed and your balance won’t change.',
-                  confirmLabel: 'Cancel payment',
-                  cancelLabel: 'Keep it',
+                  title: tr('paymentDetail.cancelTitle'),
+                  body: tr('paymentDetail.cancelBody'),
+                  confirmLabel: tr('paymentDetail.cancel'),
+                  cancelLabel: tr('paymentDetail.keep'),
                   variant: 'danger',
                   onConfirm: () => cancel.mutate(s.id, { onSuccess: () => navigation.goBack() }),
                 })
@@ -116,7 +138,7 @@ const SettlementDetailScreen: React.FC<RootScreenProps<'SettlementDetail'>> = ({
           {formatCurrency(s.amount, s.currency)}
         </Text>
         <Text tone="secondary">
-          {iSent ? 'You' : s.fromUser.name} → {iReceive ? 'you' : s.toUser.name}
+          {iSent ? tr('common.you') : s.fromUser.name} → {iReceive ? tr('common.youLower') : s.toUser.name}
         </Text>
         <Badge label={status.label} tone={status.tone} icon={status.icon} style={{ alignSelf: 'center', marginTop: 12 }} />
       </View>
@@ -124,13 +146,13 @@ const SettlementDetailScreen: React.FC<RootScreenProps<'SettlementDetail'>> = ({
       {s.note ? (
         <Card variant="alt">
           <Text variant="caption" tone="tertiary">
-            Note
+            {tr('paymentDetail.note')}
           </Text>
           <Text style={{ marginTop: 2 }}>{s.note}</Text>
         </Card>
       ) : null}
 
-      <SectionHeader title="Timeline" />
+      <SectionHeader title={tr('paymentDetail.timeline')} />
       <Card>
         {timeline.map((step, i) => (
           <View key={step.label} style={{ flexDirection: 'row', gap: 12 }}>

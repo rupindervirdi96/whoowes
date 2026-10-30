@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { planOf, recordScan, scansUsed } from '../store.js';
 import { db } from '../db/index.js';
 import { IMAGE_TYPES, assignItems, monthlyInsights, parseReceipt, quickAdd } from '../ai/claude.js';
+import { langOf } from '../i18n.js';
 
 export const aiRouter = Router();
 aiRouter.use(requireUser);
@@ -27,7 +28,8 @@ function gate(feature: Feature) {
       return res.status(402).json({
         code: 'upgrade_required',
         feature,
-        message: `This needs WhoOwes ${PLANS[minPlanFor(feature)].name}.`,
+        message: 'This needs WhoOwes {plan}.',
+        params: { plan: PLANS[minPlanFor(feature)].name },
       });
     }
     if (feature === 'receipt_scan') {
@@ -36,7 +38,8 @@ function gate(feature: Feature) {
         return res.status(402).json({
           code: 'quota_exceeded',
           feature,
-          message: `You've used all ${limit} AI scans on ${PLANS[plan].name} this month.`,
+          message: "You've used all {limit} AI scans on {plan} this month.",
+          params: { limit, plan: PLANS[plan].name },
         });
       }
     }
@@ -68,7 +71,7 @@ aiRouter.post('/receipts/parse', gate('receipt_scan'), async (req, res, next) =>
     if (body.file.mediaType !== 'application/pdf' && bytes > 5 * 1024 * 1024) {
       return res.status(413).json({ message: 'That photo is too large. Try again with a smaller image.', code: 'file_too_large' });
     }
-    const receipt = await parseReceipt(body.file, body.instructions);
+    const receipt = await parseReceipt(body.file, body.instructions, langOf(req));
     await recordScan(req.user!.id); // count only successful reads
     // Keep the parsed result so the review screen can reload it and the expense can link to it.
     const receiptId = randomUUID();
@@ -102,7 +105,7 @@ aiRouter.post('/expenses/quick-add', gate('ai_quick_add'), async (req, res, next
         today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       })
       .parse(req.body);
-    res.json(await quickAdd(body));
+    res.json(await quickAdd({ ...body, language: langOf(req) }));
   } catch (err) {
     next(err);
   }
@@ -129,6 +132,8 @@ aiRouter.post('/insights', gate('ai_insights'), async (req, res, next) => {
       .object({
         stats: z.object({
           month: z.string(),
+          // Older app versions don't send it; their amounts were always USD.
+          currency: z.string().length(3).default('USD'),
           total: z.number(),
           previousTotal: z.number(),
           count: z.number(),
@@ -138,7 +143,7 @@ aiRouter.post('/insights', gate('ai_insights'), async (req, res, next) => {
         }),
       })
       .parse(req.body);
-    res.json(await monthlyInsights(stats));
+    res.json(await monthlyInsights(stats, langOf(req)));
   } catch (err) {
     next(err);
   }

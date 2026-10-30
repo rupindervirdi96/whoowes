@@ -11,8 +11,16 @@ export interface User {
   email: string;
   phone?: string;
   avatarUrl?: string;
+  /** Preferred currency (ISO 4217). Only present on my own profile. */
+  currency?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** An amount in one currency. Amounts in different currencies are never added together. */
+export interface CurrencyAmount {
+  currency: string;
+  amount: number;
 }
 
 export interface AuthState {
@@ -100,6 +108,7 @@ export interface Reminder {
   id: string;
   fromUser: User;
   amount?: number;
+  currency?: string;
   createdAt: string;
 }
 
@@ -118,9 +127,14 @@ export interface Group {
   description?: string;
   avatarUrl?: string;
   members: GroupMember[];
+  /** Default currency for new expenses in the group. */
+  currency?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  /** Spend per currency, biggest first. */
+  totals?: CurrencyAmount[];
+  /** Spend in the group's own currency. */
   totalExpenses: number;
 }
 
@@ -128,6 +142,13 @@ export interface CreateGroupPayload {
   name: string;
   description?: string;
   memberIds: string[];
+  currency?: string;
+}
+
+export interface UpdateGroupPayload {
+  name?: string;
+  description?: string;
+  currency?: string;
 }
 
 // ─── Expenses ────────────────────────────────────────────────────────────────
@@ -233,12 +254,22 @@ export interface Receipt {
 
 // ─── Balances ─────────────────────────────────────────────────────────────────
 
+/** My balance with one person in one currency. Someone I share two currencies with has two. */
 export interface UserBalance {
   userId: string;
   user: User;
-  owes: number;    // total this user owes (positive = owes others)
-  owed: number;    // total others owe this user
-  netBalance: number; // owed - owes (positive = net creditor)
+  currency: string;
+  owes: number;    // what I owe them (positive)
+  owed: number;    // what they owe me (positive)
+  netBalance: number; // owed - owes (positive = they owe me)
+}
+
+/** My overall position in one currency. */
+export interface CurrencyTotals {
+  currency: string;
+  totalOwed: number;
+  totalOwes: number;
+  netBalance: number;
 }
 
 export interface GroupBalance {
@@ -251,6 +282,7 @@ export interface DebtSimplification {
   from: string;   // userId who owes
   to: string;     // userId who is owed
   amount: number;
+  currency: string;
   fromUser: User;
   toUser: User;
 }
@@ -356,6 +388,7 @@ export interface QuickAddDraft {
 
 export interface SpendingInsights {
   month: string;
+  currency: string;
   total: number;
   previousTotal: number;
   byCategory: Array<{ category: ExpenseCategory; amount: number }>;

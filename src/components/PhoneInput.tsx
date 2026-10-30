@@ -3,24 +3,18 @@ import { FlatList, Pressable, TextInput, View } from 'react-native';
 import { getCountries, type CountryCode } from 'libphonenumber-js';
 import { useTheme } from '../theme';
 import { callingCode, flag, formatAsYouType } from '../utils/phone';
+import { COUNTRY_TABLE } from '../i18n/countries';
+import { currentLanguage, useT, type Language } from '../i18n';
 import Text from './ui/Text';
 import Icon from './ui/Icon';
 import Input from './ui/Input';
 import BottomSheet from './ui/BottomSheet';
 
-/** Names for the countries people pick most; the rest show their ISO code. */
-const NAMES: Partial<Record<CountryCode, string>> = {
-  US: 'United States', CA: 'Canada', GB: 'United Kingdom', IE: 'Ireland', AU: 'Australia', NZ: 'New Zealand',
-  IN: 'India', PK: 'Pakistan', BD: 'Bangladesh', LK: 'Sri Lanka', NP: 'Nepal', AE: 'United Arab Emirates',
-  SA: 'Saudi Arabia', QA: 'Qatar', SG: 'Singapore', MY: 'Malaysia', PH: 'Philippines', ID: 'Indonesia',
-  TH: 'Thailand', VN: 'Vietnam', JP: 'Japan', KR: 'South Korea', CN: 'China', HK: 'Hong Kong', TW: 'Taiwan',
-  DE: 'Germany', FR: 'France', ES: 'Spain', PT: 'Portugal', IT: 'Italy', NL: 'Netherlands', BE: 'Belgium',
-  CH: 'Switzerland', AT: 'Austria', SE: 'Sweden', NO: 'Norway', DK: 'Denmark', FI: 'Finland', PL: 'Poland',
-  GR: 'Greece', TR: 'Türkiye', IL: 'Israel', EG: 'Egypt', NG: 'Nigeria', KE: 'Kenya', ZA: 'South Africa',
-  MX: 'Mexico', BR: 'Brazil', AR: 'Argentina', CL: 'Chile', CO: 'Colombia', PE: 'Peru',
-};
+const LANG_INDEX: Record<Language, number> = { en: 1, fr: 2, es: 3, hi: 4 };
+const NAMES = new Map(COUNTRY_TABLE.map((row) => [row[0], row]));
 
-export const countryName = (c: CountryCode) => NAMES[c] ?? c;
+/** Country name in the app language ("Inde", "भारत"). */
+export const countryName = (c: CountryCode, lang: Language = currentLanguage()) => NAMES.get(c)?.[LANG_INDEX[lang]] ?? c;
 
 interface PhoneInputProps {
   country: CountryCode;
@@ -36,19 +30,25 @@ interface PhoneInputProps {
 /** Country picker + national number, formatted as you type. */
 const PhoneInput: React.FC<PhoneInputProps> = ({ country, onCountryChange, value, onChangeText, error, autoFocus, onSubmitEditing }) => {
   const t = useTheme();
+  const { t: tr, lang } = useT();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
   const formatted = formatAsYouType(value, country);
 
   const countries = useMemo(() => {
-    const all = getCountries().sort((a, b) => {
-      const named = Number(!!NAMES[b]) - Number(!!NAMES[a]);
-      return named || countryName(a).localeCompare(countryName(b));
-    });
+    // The phone's own country first, then alphabetical in the app language.
+    const all = getCountries().sort((a, b) => countryName(a, lang).localeCompare(countryName(b, lang), lang));
+    const ordered = [country, ...all.filter((c) => c !== country)];
     const q = query.trim().toLowerCase().replace(/^\+/, '');
-    if (!q) return all;
-    return all.filter((c) => countryName(c).toLowerCase().includes(q) || c.toLowerCase() === q || callingCode(c).slice(1).startsWith(q));
-  }, [query]);
+    if (!q) return ordered;
+    return ordered.filter(
+      (c) =>
+        countryName(c, lang).toLowerCase().includes(q) ||
+        countryName(c, 'en').toLowerCase().includes(q) ||
+        c.toLowerCase() === q ||
+        callingCode(c).slice(1).startsWith(q),
+    );
+  }, [query, lang, country]);
 
   return (
     <View style={{ marginBottom: t.spacing.base }}>
@@ -66,7 +66,7 @@ const PhoneInput: React.FC<PhoneInputProps> = ({ country, onCountryChange, value
         <Pressable
           onPress={() => setPickerOpen(true)}
           accessibilityRole="button"
-          accessibilityLabel={`Country: ${countryName(country)} ${callingCode(country)}`}
+          accessibilityLabel={tr('phone.countryLabel', { country: countryName(country, lang), code: callingCode(country) })}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: '100%' }}
         >
           <Text style={{ fontSize: 20, lineHeight: 24 }}>{flag(country)}</Text>
@@ -81,7 +81,7 @@ const PhoneInput: React.FC<PhoneInputProps> = ({ country, onCountryChange, value
             // Deleting a "(" or "-" leaves the digits unchanged; treat it as deleting a digit.
             onChangeText(digits === value && v.length < formatted.length ? value.slice(0, -1) : digits);
           }}
-          placeholder="Phone number"
+          placeholder={tr('phone.placeholder')}
           placeholderTextColor={t.colors.textTertiary}
           keyboardType="phone-pad"
           textContentType="telephoneNumber"
@@ -89,7 +89,7 @@ const PhoneInput: React.FC<PhoneInputProps> = ({ country, onCountryChange, value
           autoFocus={autoFocus}
           onSubmitEditing={onSubmitEditing}
           selectionColor={t.colors.primary}
-          accessibilityLabel="Phone number"
+          accessibilityLabel={tr('phone.placeholder')}
           style={{ flex: 1, height: '100%', paddingHorizontal: 14, fontFamily: t.fonts.semibold, fontSize: 17, color: t.colors.text }}
         />
       </View>
@@ -99,8 +99,8 @@ const PhoneInput: React.FC<PhoneInputProps> = ({ country, onCountryChange, value
         </Text>
       ) : null}
 
-      <BottomSheet visible={pickerOpen} onClose={() => setPickerOpen(false)} title="Country">
-        <Input icon="search" value={query} onChangeText={setQuery} placeholder="Search country or code" autoCorrect={false} />
+      <BottomSheet visible={pickerOpen} onClose={() => setPickerOpen(false)} title={tr('phone.country')}>
+        <Input icon="search" value={query} onChangeText={setQuery} placeholder={tr('phone.searchCountry')} autoCorrect={false} />
         <FlatList
           data={countries}
           keyExtractor={(c) => c}
@@ -118,7 +118,7 @@ const PhoneInput: React.FC<PhoneInputProps> = ({ country, onCountryChange, value
             >
               <Text style={{ fontSize: 22, lineHeight: 26 }}>{flag(item)}</Text>
               <Text variant="bodyStrong" style={{ flex: 1 }}>
-                {countryName(item)}
+                {countryName(item, lang)}
               </Text>
               <Text tone="tertiary">{callingCode(item)}</Text>
               {item === country ? <Icon name="check" size={20} color={t.colors.primary} /> : null}

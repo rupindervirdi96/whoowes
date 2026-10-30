@@ -6,6 +6,7 @@ import { ParsedReceipt, ReceiptSourceType } from '../types';
 import { useShowToast } from '../store/uiStore';
 import { useHandlePaywallError } from './useBilling';
 import type { MutationError } from './queryUtils';
+import { translate } from '../i18n';
 
 export function useReceipt(receiptId: string) {
   return useQuery({
@@ -33,7 +34,7 @@ export function useScanReceipt() {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SUBSCRIPTION }); // scan count changed
     },
     onError: (e: MutationError) => {
-      if (!handlePaywall(e)) showToast(e.message ?? "Couldn't read that receipt", 'error');
+      if (!handlePaywall(e)) showToast(e.message ?? translate('toast.couldNotReadReceipt'), 'error');
     },
   });
 }

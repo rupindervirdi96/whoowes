@@ -13,6 +13,7 @@ import BottomSheet from './ui/BottomSheet';
 import Text from './ui/Text';
 import Icon from './ui/Icon';
 import { PlanTag } from './ui/Badge';
+import { useT } from '../i18n';
 
 interface Option {
   key: string;
@@ -26,6 +27,7 @@ interface Option {
 
 const AddSheet: React.FC = () => {
   const t = useTheme();
+  const { t: tr } = useT();
   const navigation = useNavigation();
   const open = useUIStore((s) => s.addSheetOpen);
   const groupId = useUIStore((s) => s.addSheetGroupId);
@@ -41,7 +43,7 @@ const AddSheet: React.FC = () => {
   const scanTag =
     plan === 'pro' ? null : (
       <Text variant="caption" tone={scansLeft > 0 ? 'tertiary' : 'negative'}>
-        {scansLeft === Infinity ? '' : `${scansLeft} left`}
+        {scansLeft === Infinity ? '' : tr('add.scansLeft', { count: scansLeft })}
       </Text>
     );
 
@@ -49,8 +51,8 @@ const AddSheet: React.FC = () => {
     {
       key: 'scan',
       icon: 'document-scanner',
-      title: 'Scan a receipt',
-      body: 'AI reads every line item',
+      title: tr('add.scan.title'),
+      body: tr('add.scan.body'),
       tag: scanTag,
       tint: 'primary',
       onPress: () => go(() => navigation.navigate('ReceiptScan', { groupId })),
@@ -58,8 +60,8 @@ const AddSheet: React.FC = () => {
     {
       key: 'quick',
       icon: 'bolt',
-      title: 'Quick Add with AI',
-      body: 'Describe it in a sentence',
+      title: tr('add.quick.title'),
+      body: tr('add.quick.body'),
       tag: can('ai_quick_add') ? null : <PlanTag plan="plus" />,
       tint: 'accent',
       onPress: () =>
@@ -68,16 +70,16 @@ const AddSheet: React.FC = () => {
     {
       key: 'manual',
       icon: 'edit-note',
-      title: 'Enter manually',
-      body: 'Amount, payer and split',
+      title: tr('add.manual.title'),
+      body: tr('add.manual.body'),
       tint: 'neutral',
       onPress: () => go(() => navigation.navigate('ManualExpense', { groupId })),
     },
     {
       key: 'pay',
       icon: 'swap-horiz',
-      title: 'Record a payment',
-      body: 'Paid someone back',
+      title: tr('add.pay.title'),
+      body: tr('add.pay.body'),
       tint: 'positive',
       onPress: () => go(() => navigation.navigate('SettleUp', { groupId })),
     },
@@ -91,7 +93,7 @@ const AddSheet: React.FC = () => {
   } as const;
 
   return (
-    <BottomSheet visible={open} onClose={close} title="Add">
+    <BottomSheet visible={open} onClose={close} title={tr('add.title')}>
       <View style={{ gap: 4 }}>
         {options.map((o) => {
           const [bg, fg] = tints[o.tint];

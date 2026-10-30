@@ -7,7 +7,7 @@
  */
 
 import { USE_MOCK_API, AI_TIMEOUT_MS } from '../config';
-import { CATEGORY_BY_ID } from '../constants';
+import { categoryLabel } from '../constants';
 import { MOCK_PARSED_RECEIPT } from '../constants/sampleData';
 import { PLANS, planIncludes } from '../billing/plans';
 import type {
@@ -25,7 +25,8 @@ import apiClient from './api/apiClient';
 import { BillingService } from './billing';
 import { mockDelay } from './mock/mockHelpers';
 import { generateId } from '../utils/idGenerator';
-import { roundToCents } from '../utils/currency';
+import { formatCurrency, roundToCents } from '../utils/currency';
+import { translate } from '../i18n';
 
 export interface ReceiptFile {
   base64: string;
@@ -42,6 +43,10 @@ export interface QuickAddContext {
 
 export interface MonthStats {
   month: string; // YYYY-MM
+  /** Every amount below is in this currency. */
+  currency: string;
+  /** All currencies with spending this month, most first. */
+  currencies: string[];
   total: number;
   previousTotal: number;
   byCategory: Array<{ category: ExpenseCategory; amount: number }>;
@@ -59,7 +64,7 @@ async function assertFeature(feature: Feature) {
       statusCode: 402,
       code: 'upgrade_required',
       feature,
-      message: 'This feature needs an upgrade.',
+      message: translate('billing.needsUpgrade'),
     };
     throw err;
   }
@@ -68,7 +73,7 @@ async function assertFeature(feature: Feature) {
       statusCode: 402,
       code: 'quota_exceeded',
       feature,
-      message: `You've used all ${sub.scansLimit} AI scans on ${PLANS[sub.plan].name} this month.`,
+      message: translate('billing.scansUsedUp', { limit: sub.scansLimit, plan: PLANS[sub.plan].name }),
     };
     throw err;
   }
@@ -121,7 +126,7 @@ function demoQuickAdd(text: string, ctx: QuickAddContext): QuickAddDraft {
     splitType: 'equal',
     groupId: group?.id,
     date: ctx.today,
-    note: amount === 0 ? "I couldn't find an amount — please add it." : undefined,
+    note: amount === 0 ? translate('demo.noAmount') : undefined,
   };
 }
 
@@ -145,25 +150,23 @@ function demoAssign(items: ReceiptItem[], people: User[], instruction: string): 
   return result;
 }
 
-function demoInsights(stats: MonthStats): Omit<SpendingInsights, 'month' | 'total' | 'previousTotal' | 'byCategory'> {
+function demoInsights(stats: MonthStats): Omit<SpendingInsights, 'month' | 'currency' | 'total' | 'previousTotal' | 'byCategory'> {
   const top = stats.byCategory[0];
-  const topLabel = CATEGORY_BY_ID[top?.category ?? 'other'].label;
+  const topLabel = categoryLabel(top?.category ?? 'other');
   const delta = stats.previousTotal ? Math.round(((stats.total - stats.previousTotal) / stats.previousTotal) * 100) : 0;
   const share = top && stats.total ? Math.round((top.amount / stats.total) * 100) : 0;
+  const money = (n: number) => formatCurrency(n, stats.currency, { maximumFractionDigits: 0, minimumFractionDigits: 0 });
   return {
     headline:
       delta === 0
-        ? `You shared $${stats.total.toFixed(0)} in expenses this month.`
-        : `Shared spending is ${delta > 0 ? 'up' : 'down'} ${Math.abs(delta)}% vs last month.`,
+        ? translate('demo.insights.headlineFlat', { amount: money(stats.total) })
+        : translate(delta > 0 ? 'demo.insights.headlineUp' : 'demo.insights.headlineDown', { percent: Math.abs(delta) }),
     highlights: [
-      top ? `${topLabel} was your biggest category — ${share}% of the month.` : 'No shared spending yet this month.',
-      stats.topPeople[0] ? `You split the most with ${stats.topPeople[0].name}.` : 'Add friends to start splitting.',
-      stats.biggest[0] ? `Largest bill: ${stats.biggest[0].title} ($${stats.biggest[0].amount.toFixed(0)}).` : '',
+      top ? translate('demo.insights.topCategory', { category: topLabel, percent: share }) : translate('demo.insights.nothingYet'),
+      stats.topPeople[0] ? translate('demo.insights.topPerson', { name: stats.topPeople[0].name }) : translate('demo.insights.addFriends'),
+      stats.biggest[0] ? translate('demo.insights.biggest', { title: stats.biggest[0].title, amount: money(stats.biggest[0].amount) }) : '',
     ].filter(Boolean),
-    tips: [
-      'Settle small balances weekly so they never pile up.',
-      'Scan receipts at the table — item-level splits end the "who had what" debate.',
-    ],
+    tips: [translate('demo.insights.tip1'), translate('demo.insights.tip2')],
   };
 }
 
@@ -182,7 +185,7 @@ export const AIService = {
       return {
         ...MOCK_PARSED_RECEIPT,
         items: MOCK_PARSED_RECEIPT.items.map((i) => ({ ...i, id: generateId() })),
-        rawText: 'Demo mode: this is a sample receipt, not the one you scanned. Connect the WhoOwes server to read real receipts.',
+        rawText: translate('demo.sampleReceipt'),
       };
     }
     const res = await apiClient.post<ParsedReceipt & { receiptId: string }>(
@@ -236,6 +239,7 @@ export const AIService = {
   async insights(stats: MonthStats): Promise<SpendingInsights> {
     const base = {
       month: stats.month,
+      currency: stats.currency,
       total: stats.total,
       previousTotal: stats.previousTotal,
       byCategory: stats.byCategory,
@@ -247,7 +251,7 @@ export const AIService = {
     }
     const res = await apiClient.post<Pick<SpendingInsights, 'headline' | 'highlights' | 'tips'>>(
       '/ai/insights',
-      { stats: { ...stats, total: roundToCents(stats.total) } },
+      { stats: { ...stats, currencies: undefined, total: roundToCents(stats.total) } },
       { timeout: AI_TIMEOUT_MS },
     );
     return { ...base, ...res.data };

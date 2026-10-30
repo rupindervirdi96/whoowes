@@ -13,9 +13,9 @@ export async function loadGroups(ids: string[], viewer: string) {
   const [groups, totals] = await Promise.all([
     db.groups.find({ _id: { $in: ids } }).toArray(),
     db.expenses
-      .aggregate<{ _id: string; total: number; last: Date | null }>([
+      .aggregate<{ _id: { groupId: string; currency: string }; total: number; last: Date | null }>([
         { $match: { groupId: { $in: ids } } },
-        { $group: { _id: '$groupId', total: { $sum: '$amountCents' }, last: { $max: '$date' } } },
+        { $group: { _id: { groupId: '$groupId', currency: '$currency' }, total: { $sum: '$amountCents' }, last: { $max: '$date' } } },
       ])
       .toArray(),
   ]);
@@ -24,16 +24,22 @@ export async function loadGroups(ids: string[], viewer: string) {
     viewer,
   );
   return groups.map((g) => {
-    const t = totals.find((x) => x._id === g._id);
-    const last = t?.last && t.last > g.updatedAt ? t.last : g.updatedAt;
+    // Spend per currency, biggest first; amounts in different currencies are never added together.
+    const mine = totals.filter((x) => x._id.groupId === g._id).sort((a, b) => b.total - a.total);
+    const lastExpense = mine.reduce<Date | null>((acc, x) => (x.last && (!acc || x.last > acc) ? x.last : acc), null);
+    const last = lastExpense && lastExpense > g.updatedAt ? lastExpense : g.updatedAt;
+    const currency = g.currency ?? mine[0]?._id.currency ?? undefined;
     return {
       id: g._id,
       name: g.name,
       description: g.description ?? undefined,
+      currency,
       createdBy: g.createdBy,
       createdAt: iso(g.createdAt)!,
       updatedAt: iso(last)!,
-      totalExpenses: toAmount(t?.total ?? 0),
+      totals: mine.map((x) => ({ currency: x._id.currency, amount: toAmount(x.total) })),
+      /** Spend in the group's own currency (older app versions read this). */
+      totalExpenses: toAmount(mine.find((x) => x._id.currency === currency)?.total ?? 0),
       members: [...g.members]
         .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())
         .map((m) => ({ userId: m.userId, user: users.get(m.userId) ?? deletedUser(m.userId), role: m.role, joinedAt: iso(m.joinedAt)! })),

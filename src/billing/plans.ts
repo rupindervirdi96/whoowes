@@ -6,16 +6,18 @@
  */
 
 import type { Feature, PlanId, BillingInterval } from '../types';
+import { translate, type TKey } from '../i18n';
 
 export interface PlanDefinition {
   id: PlanId;
+  /** Brand name, not translated (except "Free", see planName). */
   name: string;
-  tagline: string;
-  /** Display prices in USD. Real prices live in Stripe (see server/scripts/stripe-setup.ts). */
+  taglineKey: TKey;
+  /** Display prices in USD for the web (Stripe). App stores show their own local prices. */
   price: Record<BillingInterval, number>;
   monthlyScanLimit: number | null; // null = unlimited
   features: Feature[];
-  perks: string[];
+  perkKeys: TKey[];
   highlight?: boolean;
 }
 
@@ -23,77 +25,66 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
   free: {
     id: 'free',
     name: 'Free',
-    tagline: 'Split bills with friends',
+    taglineKey: 'plan.free.tagline',
     price: { month: 0, year: 0 },
     monthlyScanLimit: 3,
     features: ['receipt_scan'],
-    perks: [
-      'Unlimited expenses, friends and groups',
-      'Smart settle-up suggestions',
-      '3 AI receipt scans a month',
-    ],
+    perkKeys: ['plan.free.perk1', 'plan.free.perk2', 'plan.free.perk3'],
   },
   plus: {
     id: 'plus',
     name: 'Plus',
-    tagline: 'Less typing, more living',
+    taglineKey: 'plan.plus.tagline',
     price: { month: 2.99, year: 24.99 },
     monthlyScanLimit: 30,
     features: ['receipt_scan', 'ai_quick_add', 'csv_export'],
-    perks: [
-      'Everything in Free',
-      '30 AI receipt scans a month',
-      'AI Quick Add — type it like a text',
-      'CSV export',
-    ],
+    perkKeys: ['plan.plus.perk1', 'plan.plus.perk2', 'plan.plus.perk3', 'plan.plus.perk4'],
   },
   pro: {
     id: 'pro',
     name: 'Pro',
-    tagline: 'Your money, on autopilot',
+    taglineKey: 'plan.pro.tagline',
     price: { month: 5.99, year: 49.99 },
     monthlyScanLimit: null,
     features: ['receipt_scan', 'ai_quick_add', 'ai_split_assistant', 'ai_insights', 'csv_export'],
-    perks: [
-      'Everything in Plus',
-      'Unlimited AI receipt scans',
-      'AI Split Assistant — "Sam had the wine"',
-      'Monthly AI spending insights',
-    ],
+    perkKeys: ['plan.pro.perk1', 'plan.pro.perk2', 'plan.pro.perk3', 'plan.pro.perk4'],
     highlight: true,
   },
 };
 
+/** "Free" is translated; Plus and Pro are names. */
+export const planName = (id: PlanId) => (id === 'free' ? translate('plan.free.name') : PLANS[id].name);
+
 export const PLAN_ORDER: PlanId[] = ['free', 'plus', 'pro'];
 
-export const FEATURE_COPY: Record<Feature, { title: string; body: string; icon: string; minPlan: PlanId }> = {
+export const FEATURE_COPY: Record<Feature, { titleKey: TKey; bodyKey: TKey; icon: string; minPlan: PlanId }> = {
   receipt_scan: {
-    title: 'AI receipt scanning',
-    body: 'Snap a receipt and every line item is read for you.',
+    titleKey: 'feature.receipt_scan.title',
+    bodyKey: 'feature.receipt_scan.body',
     icon: 'document-scanner',
     minPlan: 'free',
   },
   ai_quick_add: {
-    title: 'AI Quick Add',
-    body: 'Type "Tacos $64 with Sam and Priya" and you are done.',
+    titleKey: 'feature.ai_quick_add.title',
+    bodyKey: 'feature.ai_quick_add.body',
     icon: 'bolt',
     minPlan: 'plus',
   },
   ai_split_assistant: {
-    title: 'AI Split Assistant',
-    body: 'Tell it who had what and it assigns the items.',
+    titleKey: 'feature.ai_split_assistant.title',
+    bodyKey: 'feature.ai_split_assistant.body',
     icon: 'auto-awesome',
     minPlan: 'pro',
   },
   ai_insights: {
-    title: 'AI spending insights',
-    body: 'A monthly read-out of where the money went — and who it went with.',
+    titleKey: 'feature.ai_insights.title',
+    bodyKey: 'feature.ai_insights.body',
     icon: 'insights',
     minPlan: 'pro',
   },
   csv_export: {
-    title: 'CSV export',
-    body: 'Download every expense for your spreadsheet or accountant.',
+    titleKey: 'feature.csv_export.title',
+    bodyKey: 'feature.csv_export.body',
     icon: 'file-download',
     minPlan: 'plus',
   },

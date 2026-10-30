@@ -4,10 +4,12 @@ import { useHideModal, useModal } from '../../store/uiStore';
 import { useTheme } from '../../theme';
 import Text from './Text';
 import Button from './Button';
+import { useT } from '../../i18n';
 
 /** Global confirm dialog — open it from anywhere with useShowModal(). */
 const ConfirmModal: React.FC = () => {
   const t = useTheme();
+  const { t: tr } = useT();
   const modal = useModal();
   const hideModal = useHideModal();
 
@@ -41,9 +43,9 @@ const ConfirmModal: React.FC = () => {
             </Text>
           ) : null}
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 24 }}>
-            <Button title={modal.cancelLabel ?? 'Cancel'} variant="secondary" onPress={cancel} style={{ flex: 1 }} />
+            <Button title={modal.cancelLabel ?? tr('common.cancel')} variant="secondary" onPress={cancel} style={{ flex: 1 }} />
             <Button
-              title={modal.confirmLabel ?? 'Confirm'}
+              title={modal.confirmLabel ?? tr('common.confirm')}
               variant={modal.variant === 'danger' ? 'danger' : 'primary'}
               onPress={confirm}
               style={{ flex: 1 }}

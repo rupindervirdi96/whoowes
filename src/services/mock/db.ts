@@ -33,13 +33,21 @@ export function findUser(id: string): User {
   );
 }
 
-/** Group totals are derived, never stored, so they can't drift. */
+/** Group totals are derived, never stored, so they can't drift. Kept per currency. */
 export function withTotals(group: Group): Group {
-  const totalExpenses = db.expenses
-    .filter((e) => e.groupId === group.id)
-    .reduce((sum, e) => sum + e.amount, 0);
-  const last = db.expenses
-    .filter((e) => e.groupId === group.id)
-    .reduce((max, e) => (e.date > max ? e.date : max), group.updatedAt);
-  return { ...group, totalExpenses: Math.round(totalExpenses * 100) / 100, updatedAt: last };
+  const inGroup = db.expenses.filter((e) => e.groupId === group.id);
+  const sums = new Map<string, number>();
+  for (const e of inGroup) sums.set(e.currency, (sums.get(e.currency) ?? 0) + e.amount);
+  const totals = [...sums.entries()]
+    .map(([currency, amount]) => ({ currency, amount: Math.round(amount * 100) / 100 }))
+    .sort((a, b) => b.amount - a.amount);
+  const currency = group.currency ?? totals[0]?.currency;
+  const last = inGroup.reduce((max, e) => (e.date > max ? e.date : max), group.updatedAt);
+  return {
+    ...group,
+    currency,
+    totals,
+    totalExpenses: totals.find((t) => t.currency === currency)?.amount ?? 0,
+    updatedAt: last,
+  };
 }

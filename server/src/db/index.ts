@@ -32,6 +32,8 @@ export interface UserDoc {
   /** Lower-cased email, for case-insensitive lookups. */
   emailLower: string | null;
   avatarUrl: string | null;
+  /** Preferred currency (ISO 4217). Set from the phone's region on sign-up; changeable. */
+  currency?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,6 +61,8 @@ export interface GroupDoc {
   description: string | null;
   createdBy: string;
   members: GroupMember[];
+  /** Default currency for new expenses in this group. */
+  currency?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -121,6 +125,7 @@ export interface ReminderDoc {
   fromUserId: string;
   toUserId: string;
   amountCents: number | null;
+  currency?: string | null;
   createdAt: Date;
   dismissedAt: Date | null;
 }

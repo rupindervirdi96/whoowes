@@ -3,6 +3,8 @@
  * AI-written read-out. Charts follow the dataviz rules: one fixed color per
  * category, every bar directly labeled with name + value (never color alone),
  * thin 4px-rounded bars, 2px gaps between stacked segments.
+ *
+ * One currency at a time: amounts in different currencies are never added up.
  */
 
 import React, { useState } from 'react';
@@ -10,7 +12,9 @@ import { View } from 'react-native';
 import { useTheme } from '../../theme';
 import { RootScreenProps } from '../../types/navigation';
 import { useMonthInsights } from '../../hooks/useAI';
+import { useT } from '../../i18n';
 import { formatCurrency } from '../../utils/currency';
+import { formatMonthName } from '../../utils/date';
 import { monthKey, monthLabel, shiftMonth } from '../../utils/insights';
 import { CATEGORY_BY_ID, CATEGORY_CHART_ORDER } from '../../constants';
 import Screen from '../../components/ui/Screen';
@@ -19,6 +23,7 @@ import Card from '../../components/ui/Card';
 import Icon from '../../components/ui/Icon';
 import IconButton from '../../components/ui/IconButton';
 import Button from '../../components/ui/Button';
+import Chip from '../../components/ui/Chip';
 import Skeleton from '../../components/ui/Skeleton';
 import Avatar from '../../components/ui/Avatar';
 import { PlanTag } from '../../components/ui/Badge';
@@ -28,52 +33,69 @@ import { categoryColor } from '../../components/ui/CategoryIcon';
 
 const InsightsScreen: React.FC<RootScreenProps<'Insights'>> = ({ navigation }) => {
   const t = useTheme();
+  const { t: tr } = useT();
   const thisMonth = monthKey(new Date());
   const [month, setMonth] = useState(thisMonth);
-  const { stats, narrative, aiEnabled } = useMonthInsights(month);
+  const [currency, setCurrency] = useState<string>();
+  const { stats, narrative, aiEnabled } = useMonthInsights(month, currency);
 
   const delta = stats && stats.previousTotal > 0 ? (stats.total - stats.previousTotal) / stats.previousTotal : null;
   const max = Math.max(...(stats?.byCategory.map((c) => c.amount) ?? [0]), 1);
+  const money = (n: number) => formatCurrency(n, stats?.currency ?? 'USD');
+  const [y, m] = month.split('-').map(Number);
+  const previousMonthName = formatMonthName(new Date(y, m - 2, 1));
 
   return (
     <Screen>
       {/* Month switcher */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: t.spacing.base }}>
-        <IconButton icon="chevron-left" accessibilityLabel="Previous month" onPress={() => setMonth((m) => shiftMonth(m, -1))} />
+        <IconButton icon="chevron-left" accessibilityLabel={tr('insights.previousMonth')} onPress={() => setMonth((x) => shiftMonth(x, -1))} />
         <Text variant="h3">{monthLabel(month)}</Text>
         <IconButton
           icon="chevron-right"
-          accessibilityLabel="Next month"
-          onPress={() => setMonth((m) => (m < thisMonth ? shiftMonth(m, 1) : m))}
+          accessibilityLabel={tr('insights.nextMonth')}
+          onPress={() => setMonth((x) => (x < thisMonth ? shiftMonth(x, 1) : x))}
           style={{ opacity: month < thisMonth ? 1 : 0.35 }}
         />
       </View>
 
+      {/* Spent in several currencies: one at a time. */}
+      {stats && stats.currencies.length > 1 ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: t.spacing.base }}>
+          {stats.currencies.map((c) => (
+            <Chip key={c} label={c} selected={c === stats.currency} onPress={() => setCurrency(c)} />
+          ))}
+        </View>
+      ) : null}
+
       {!stats ? (
         <Skeleton height={140} radius={18} />
       ) : stats.count === 0 ? (
-        <EmptyState emoji="📭" title="No shared spending" body={`Nothing was split in ${monthLabel(month)}.`} />
+        <EmptyState emoji="📭" title={tr('insights.empty.title')} body={tr('insights.empty.body', { month: monthLabel(month) })} />
       ) : (
         <>
           {/* Hero stat */}
           <Card>
             <Text variant="overline" tone="tertiary">
-              Your share
+              {tr('insights.yourShare')}
             </Text>
             <Text variant="display" tabular style={{ marginTop: 4 }}>
-              {formatCurrency(stats.total)}
+              {money(stats.total)}
             </Text>
             {delta !== null ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
                 <Icon name={delta > 0 ? 'trending-up' : 'trending-down'} size={18} color={t.colors.textSecondary} />
-                <Text variant="label" tone="secondary">
-                  {Math.abs(Math.round(delta * 100))}% {delta > 0 ? 'more' : 'less'} than {monthLabel(shiftMonth(month, -1)).split(' ')[0]} (
-                  {formatCurrency(stats.previousTotal)})
+                <Text variant="label" tone="secondary" style={{ flexShrink: 1 }}>
+                  {tr(delta > 0 ? 'insights.more' : 'insights.less', {
+                    percent: Math.abs(Math.round(delta * 100)),
+                    month: previousMonthName,
+                    amount: money(stats.previousTotal),
+                  })}
                 </Text>
               </View>
             ) : null}
             <Text variant="caption" tone="tertiary" style={{ marginTop: 4 }}>
-              Across {stats.count} shared expense{stats.count === 1 ? '' : 's'}
+              {tr('insights.across', { count: stats.count })}
             </Text>
 
             {/* Stacked proportion bar — fixed category order */}
@@ -87,7 +109,7 @@ const InsightsScreen: React.FC<RootScreenProps<'Insights'>> = ({ navigation }) =
           </Card>
 
           {/* AI read-out */}
-          <SectionHeader title="The read-out" />
+          <SectionHeader title={tr('insights.readout')} />
           {aiEnabled ? (
             narrative.isLoading ? (
               <Card style={{ gap: 10 }}>
@@ -100,7 +122,7 @@ const InsightsScreen: React.FC<RootScreenProps<'Insights'>> = ({ navigation }) =
                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                   <Icon name="auto-awesome" size={18} color={t.colors.primary} />
                   <Text variant="overline" tone="primary">
-                    AI summary
+                    {tr('insights.aiSummary')}
                   </Text>
                 </View>
                 <Text variant="h3" style={{ marginTop: 8 }}>
@@ -116,7 +138,7 @@ const InsightsScreen: React.FC<RootScreenProps<'Insights'>> = ({ navigation }) =
                 </View>
                 {narrative.data.tips.length ? (
                   <View style={{ marginTop: 14, padding: 12, borderRadius: t.radius.md, backgroundColor: t.colors.surfaceAlt, gap: 6 }}>
-                    <Text variant="label">Tips</Text>
+                    <Text variant="label">{tr('insights.tips')}</Text>
                     {narrative.data.tips.map((tip) => (
                       <Text key={tip} variant="caption" tone="secondary">
                         💡 {tip}
@@ -127,43 +149,50 @@ const InsightsScreen: React.FC<RootScreenProps<'Insights'>> = ({ navigation }) =
               </Card>
             ) : (
               <Card variant="alt">
-                <Text tone="secondary">Couldn’t load the summary right now.</Text>
-                <Button title="Try again" size="sm" variant="secondary" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={() => narrative.refetch()} />
+                <Text tone="secondary">{tr('insights.couldNotLoad')}</Text>
+                <Button title={tr('common.tryAgain')} size="sm" variant="secondary" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={() => narrative.refetch()} />
               </Card>
             )
           ) : (
             <Card variant="alt">
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text variant="bodyStrong" style={{ flex: 1 }}>
-                  Get a monthly AI read-out
+                  {tr('insights.locked.title')}
                 </Text>
                 <PlanTag plan="pro" />
               </View>
               <Text tone="secondary" style={{ marginTop: 6 }}>
-                Trends, who you split with most, and tips to keep balances small — written for you every month.
+                {tr('insights.locked.body')}
               </Text>
-              <Button title="Unlock with Pro" variant="pro" size="sm" style={{ marginTop: 12, alignSelf: 'flex-start' }} onPress={() => navigation.navigate('Plans', { feature: 'ai_insights' })} />
+              <Button
+                title={tr('insights.unlock')}
+                variant="pro"
+                size="sm"
+                style={{ marginTop: 12, alignSelf: 'flex-start' }}
+                onPress={() => navigation.navigate('Plans', { feature: 'ai_insights' })}
+              />
             </Card>
           )}
 
           {/* Category bars — sorted by amount, each directly labeled */}
-          <SectionHeader title="By category" />
+          <SectionHeader title={tr('insights.byCategory')} />
           <Card style={{ gap: 14 }}>
             {stats.byCategory.map((c) => {
               const meta = CATEGORY_BY_ID[c.category];
+              const label = tr(meta.labelKey);
               const pct = stats.total > 0 ? Math.round((c.amount / stats.total) * 100) : 0;
               return (
-                <View key={c.category} accessible accessibilityLabel={`${meta.label}: ${formatCurrency(c.amount)}, ${pct} percent`}>
+                <View key={c.category} accessible accessibilityLabel={`${label}: ${money(c.amount)}, ${pct}%`}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
                     <Text style={{ width: 26 }}>{meta.emoji}</Text>
                     <Text variant="label" style={{ flex: 1 }}>
-                      {meta.label}
+                      {label}
                     </Text>
                     <Text variant="caption" tone="tertiary" style={{ marginRight: 8 }}>
                       {pct}%
                     </Text>
                     <Text variant="label" tabular>
-                      {formatCurrency(c.amount)}
+                      {money(c.amount)}
                     </Text>
                   </View>
                   <View style={{ height: 8, borderRadius: 4, backgroundColor: t.colors.surfaceAlt }}>
@@ -183,7 +212,7 @@ const InsightsScreen: React.FC<RootScreenProps<'Insights'>> = ({ navigation }) =
 
           {stats.topPeople.length ? (
             <>
-              <SectionHeader title="Who you split with most" />
+              <SectionHeader title={tr('insights.splitMost')} />
               <Card padding={4} style={{ paddingHorizontal: 12 }}>
                 {stats.topPeople.map((p, i) => (
                   <ListRow
@@ -191,8 +220,12 @@ const InsightsScreen: React.FC<RootScreenProps<'Insights'>> = ({ navigation }) =
                     divider={i < stats.topPeople.length - 1}
                     leading={<Avatar name={p.name} size="sm" />}
                     title={p.name}
-                    subtitle="their shares"
-                    trailing={<Text variant="bodyStrong" tabular>{formatCurrency(p.amount)}</Text>}
+                    subtitle={tr('insights.theirShares')}
+                    trailing={
+                      <Text variant="bodyStrong" tabular>
+                        {money(p.amount)}
+                      </Text>
+                    }
                   />
                 ))}
               </Card>

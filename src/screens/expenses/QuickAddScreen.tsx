@@ -10,9 +10,11 @@ import { useCreateExpense } from '../../hooks/useExpenses';
 import { useQuickAdd } from '../../hooks/useAI';
 import { useEntitlements } from '../../hooks/useBilling';
 import { calculateSplit } from '../../utils/splitEngine';
-import { formatCurrency } from '../../utils/currency';
+import { currencyDecimals, formatCurrency } from '../../utils/currency';
 import { firstName } from '../../utils/money';
-import { CATEGORY_BY_ID } from '../../constants';
+import { categoryLabel } from '../../constants';
+import { useMyCurrency } from '../../hooks/useCurrency';
+import { useT, type TKey } from '../../i18n';
 import Screen from '../../components/ui/Screen';
 import Text from '../../components/ui/Text';
 import Button from '../../components/ui/Button';
@@ -23,16 +25,13 @@ import Icon from '../../components/ui/Icon';
 import CategoryIcon from '../../components/ui/CategoryIcon';
 import { PlanTag } from '../../components/ui/Badge';
 
-const EXAMPLES = [
-  'Ramen $74 with Sarah, I paid',
-  'Uber 31.50 with David, he paid',
-  'Groceries $145 for Apartment 4B',
-  'Concert tickets $180 with Priya',
-];
+const EXAMPLES: TKey[] = ['quickAdd.example1', 'quickAdd.example2', 'quickAdd.example3', 'quickAdd.example4'];
 
 const QuickAddScreen: React.FC<RootScreenProps<'QuickAdd'>> = ({ route, navigation }) => {
   const t = useTheme();
+  const { t: tr } = useT();
   const me = useCurrentUser()!;
+  const myCurrency = useMyCurrency();
   const { data: friends = [] } = useFriends();
   const { data: groups = [] } = useGroups();
   const { can } = useEntitlements();
@@ -50,8 +49,10 @@ const QuickAddScreen: React.FC<RootScreenProps<'QuickAdd'>> = ({ route, navigati
     if (!text.trim()) return;
     const today = new Date().toISOString().slice(0, 10);
     const groupHint = route.params?.groupId;
+    // Amounts without a currency mean the group's currency, else mine.
+    const currency = groups.find((g) => g.id === groupHint)?.currency ?? myCurrency;
     quickAdd.mutate(
-      { text: text.trim(), ctx: { me, people, groups, currency: 'USD', today } },
+      { text: text.trim(), ctx: { me, people, groups, currency, today } },
       { onSuccess: (d) => setDraft({ ...d, groupId: d.groupId ?? groupHint }) },
     );
   };
@@ -70,6 +71,7 @@ const QuickAddScreen: React.FC<RootScreenProps<'QuickAdd'>> = ({ route, navigati
             type: 'equal',
             total: draft.amount,
             paidBy: draft.paidBy,
+            decimals: currencyDecimals(draft.currency),
             participants: participants.map((p) => ({ userId: p.id, user: p })),
           })
       : null;
@@ -100,13 +102,13 @@ const QuickAddScreen: React.FC<RootScreenProps<'QuickAdd'>> = ({ route, navigati
             <Icon name="bolt" size={36} color={t.brand.citrus} />
           </View>
           <Text variant="h2" align="center" style={{ marginTop: t.spacing.base }}>
-            Add expenses like you text
+            {tr('quickAdd.locked.title')}
           </Text>
           <Text tone="secondary" align="center" style={{ marginTop: 8, maxWidth: 300 }}>
-            Type “Tacos $64 with Sam and Priya, I paid” and WhoOwes fills in the rest.
+            {tr('quickAdd.locked.body')}
           </Text>
           <PlanTag plan="plus" style={{ alignSelf: 'center', marginTop: 12 }} />
-          <Button title="See plans" variant="pro" size="lg" style={{ marginTop: t.spacing.xl }} onPress={() => navigation.replace('Plans', { feature: 'ai_quick_add' })} />
+          <Button title={tr('common.seePlans')} variant="pro" size="lg" style={{ marginTop: t.spacing.xl }} onPress={() => navigation.replace('Plans', { feature: 'ai_quick_add' })} />
         </View>
       </Screen>
     );
@@ -118,21 +120,21 @@ const QuickAddScreen: React.FC<RootScreenProps<'QuickAdd'>> = ({ route, navigati
         draft ? (
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Button
-              title="Edit details"
+              title={tr('quickAdd.editDetails')}
               variant="secondary"
               style={{ flex: 1 }}
               onPress={() => navigation.replace('ManualExpense', { draft })}
             />
-            <Button title="Save" icon="check" style={{ flex: 1 }} disabled={!split?.isValid} loading={create.isPending} onPress={save} />
+            <Button title={tr('common.save')} icon="check" style={{ flex: 1 }} disabled={!split?.isValid} loading={create.isPending} onPress={save} />
           </View>
         ) : (
-          <Button title="Understand it" icon="auto-awesome" size="lg" fullWidth disabled={!text.trim()} loading={quickAdd.isPending} onPress={parse} />
+          <Button title={tr('quickAdd.understand')} icon="auto-awesome" size="lg" fullWidth disabled={!text.trim()} loading={quickAdd.isPending} onPress={parse} />
         )
       }
     >
-      <Text variant="h2">What did you spend?</Text>
+      <Text variant="h2">{tr('quickAdd.title')}</Text>
       <Text tone="secondary" style={{ marginTop: 4, marginBottom: t.spacing.base }}>
-        Say it however you like — amount, who was there, who paid.
+        {tr('quickAdd.subtitle')}
       </Text>
 
       <View
@@ -151,19 +153,19 @@ const QuickAddScreen: React.FC<RootScreenProps<'QuickAdd'>> = ({ route, navigati
             setText(v);
             if (draft) setDraft(null);
           }}
-          placeholder="e.g. Pizza $48 with Sarah and David, Sarah paid"
+          placeholder={tr('quickAdd.placeholder')}
           placeholderTextColor={t.colors.textTertiary}
           multiline
           autoFocus
           style={{ fontFamily: t.fonts.medium, fontSize: 18, lineHeight: 26, color: t.colors.text, minHeight: 90, textAlignVertical: 'top' }}
-          accessibilityLabel="Describe the expense"
+          accessibilityLabel={tr('quickAdd.describe')}
         />
       </View>
 
       {!draft ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-          {EXAMPLES.map((ex) => (
-            <Chip key={ex} label={ex} onPress={() => setText(ex)} />
+          {EXAMPLES.map((key) => (
+            <Chip key={key} label={tr(key)} onPress={() => setText(tr(key))} />
           ))}
         </View>
       ) : (
@@ -175,7 +177,7 @@ const QuickAddScreen: React.FC<RootScreenProps<'QuickAdd'>> = ({ route, navigati
                 {draft.title}
               </Text>
               <Text variant="caption" tone="tertiary">
-                {CATEGORY_BY_ID[draft.category].label}
+                {categoryLabel(draft.category)}
                 {draft.groupId ? ` · ${groups.find((g) => g.id === draft.groupId)?.name ?? ''}` : ''}
               </Text>
             </View>
@@ -185,15 +187,15 @@ const QuickAddScreen: React.FC<RootScreenProps<'QuickAdd'>> = ({ route, navigati
           </View>
           <View style={{ height: 1, backgroundColor: t.colors.border, marginVertical: 14 }} />
           <Text variant="caption" tone="tertiary" style={{ marginBottom: 8 }}>
-            {draft.paidBy === me.id ? 'You paid' : `${firstName(byId(draft.paidBy)?.name ?? 'Someone')} paid`} · split{' '}
-            {draft.splitType === 'equal' ? 'equally' : 'by amount'}
+            {draft.paidBy === me.id ? tr('expense.youPaid') : tr('expense.theyPaid', { name: firstName(byId(draft.paidBy)?.name ?? tr('quickAdd.someone')) })} ·{' '}
+            {tr(draft.splitType === 'equal' ? 'quickAdd.splitEqually' : 'quickAdd.splitByAmount')}
           </Text>
           {(split?.splits ?? []).map((s) => (
             <View key={s.userId} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 }}>
               <Avatar name={s.user.name} size="xs" />
-              <Text style={{ flex: 1 }}>{s.userId === me.id ? 'You' : s.user.name}</Text>
+              <Text style={{ flex: 1 }}>{s.userId === me.id ? tr('common.you') : s.user.name}</Text>
               <Text variant="bodyStrong" tabular>
-                {formatCurrency(s.amount)}
+                {formatCurrency(s.amount, draft.currency)}
               </Text>
             </View>
           ))}

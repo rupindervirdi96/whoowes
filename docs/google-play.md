@@ -130,6 +130,8 @@ Google can take **up to 36 hours** before the credentials work.
 > • Add an expense in seconds and split it equally, by amount, by percentage or by item
 > • Groups for trips, roommates and dinners, or split one-to-one with a friend
 > • See at a glance who owes you and who you owe
+> • Any currency: each group and expense keeps its own, and balances are never mixed or converted
+> • In English, French, Spanish and Hindi
 >
 > SNAP THE RECEIPT
 > • Take a photo of a receipt and AI reads every item, the tax and the tip
@@ -146,7 +148,7 @@ Google can take **up to 36 hours** before the credentials work.
 > • No ads, no tracking
 >
 > WHOOWES PLUS AND PRO
-> Free covers unlimited expenses, friends and groups, plus 3 AI receipt scans a month. Plus adds 30 scans, AI Quick Add (type "Tacos $64 with Sam and Priya") and CSV export. Pro adds unlimited scans, the AI Split Assistant and monthly spending insights. Subscriptions are billed through Google Play and can be cancelled any time.
+> Free covers unlimited expenses, friends and groups, plus 3 AI receipt scans a month. Plus adds 30 scans, AI Quick Add (type "Tacos 64 with Sam and Priya") and CSV export. Pro adds unlimited scans, the AI Split Assistant and monthly spending insights. Subscriptions are billed through Google Play and can be cancelled any time.
 >
 > WhoOwes records who owes what. It doesn't move money or connect to your bank.
 
@@ -156,6 +158,120 @@ Google can take **up to 36 hours** before the credentials work.
 - Phone screenshots: 2 to 8, taken on your phone from the real app. Good ones: Home with balances, a group, the receipt scan result, settle up, the plans screen. Use the sample data account, not real friends' names and numbers.
 
 **Category**: Finance. **Contact email**: your `SUPPORT_EMAIL`. **Privacy policy**: `https://whoowes-api-nbi9.onrender.com/privacy`.
+
+### 5b. Translated listings (French, Spanish, Hindi)
+
+The app follows the phone's language (people can also pick one in **Account → Language**, or on the first screen). Give the store listing the same languages: **Main store listing → Manage translations → Add your own translations**, add **French (fr-FR and fr-CA)**, **Spanish (es-419, es-ES and es-US)** and **Hindi (hi-IN)**, and paste the text below. Leave anything you don't translate (like screenshots) and Play shows the English version. Screenshots of the app in each language are a nice extra, not a requirement.
+
+**French**
+
+- App name: `WhoOwes : partage de frais`
+- Short description:
+  > Partagez les dépenses entre amis. Photographiez le reçu, l’IA fait le partage.
+- Full description:
+  > WhoOwes garde la trace des dépenses partagées, pour que personne n’ait à se souvenir de qui a payé quoi.
+  >
+  > PARTAGEZ TOUT
+  > • Ajoutez une dépense en quelques secondes et partagez-la à parts égales, par montant, par pourcentage ou par article
+  > • Des groupes pour les voyages, la colocation et les dîners, ou un partage en tête-à-tête avec un ami
+  > • Voyez en un coup d’œil qui vous doit et à qui vous devez
+  > • Toutes les devises : chaque groupe et chaque dépense gardent la leur, et les soldes ne sont jamais mélangés ni convertis
+  > • En français, anglais, espagnol et hindi
+  >
+  > PHOTOGRAPHIEZ LE REÇU
+  > • Prenez un reçu en photo : l’IA lit chaque article, les taxes et le pourboire
+  > • Touchez qui a pris quoi, et le partage est fait
+  >
+  > RÉGLEZ VOS COMPTES
+  > • Des suggestions intelligentes règlent un groupe avec le moins de paiements possible
+  > • Enregistrez les paiements, votre ami confirme quand l’argent arrive
+  > • Envoyez un petit rappel quand quelqu’un oublie
+  >
+  > CONFIDENTIEL PAR NATURE
+  > • Connexion avec votre numéro de téléphone, sans mot de passe à retenir
+  > • Trouvez vos amis dans vos contacts : les numéros sont brouillés sur votre téléphone et jamais stockés
+  > • Pas de publicité, pas de pistage
+  >
+  > WHOOWES PLUS ET PRO
+  > Le forfait Gratuit comprend dépenses, amis et groupes illimités, plus 3 scans de reçus IA par mois. Plus ajoute 30 scans, l’Ajout rapide IA (tapez « Tacos 64 avec Sam et Priya ») et l’export CSV. Pro ajoute les scans illimités, l’Assistant de partage IA et une analyse mensuelle des dépenses. Les abonnements sont facturés par Google Play et résiliables à tout moment.
+  >
+  > WhoOwes note qui doit quoi. L’app ne transfère pas d’argent et ne se connecte pas à votre banque.
+
+**Spanish**
+
+- App name: `WhoOwes: divide gastos`
+- Short description:
+  > Divide gastos con amigos. Hazle una foto al recibo y la IA lo divide por ti.
+- Full description:
+  > WhoOwes lleva la cuenta de los gastos compartidos para que nadie tenga que recordar quién pagó qué.
+  >
+  > DIVIDE LO QUE SEA
+  > • Añade un gasto en segundos y divídelo a partes iguales, por importe, por porcentaje o por artículo
+  > • Grupos para viajes, compañeros de piso y cenas, o divide con un solo amigo
+  > • Mira de un vistazo quién te debe y a quién le debes
+  > • Cualquier moneda: cada grupo y cada gasto conserva la suya, y los saldos nunca se mezclan ni se convierten
+  > • En español, inglés, francés e hindi
+  >
+  > FOTOGRAFÍA EL RECIBO
+  > • Hazle una foto a un recibo y la IA lee cada artículo, los impuestos y la propina
+  > • Toca quién tomó qué y listo
+  >
+  > SALDA CUENTAS
+  > • Sugerencias inteligentes para saldar un grupo con el menor número de pagos
+  > • Registra los pagos y tu amigo confirma cuando le llega el dinero
+  > • Envía un recordatorio amable cuando alguien se olvida
+  >
+  > PRIVADO DESDE EL DISEÑO
+  > • Inicia sesión con tu número de teléfono, sin contraseñas que recordar
+  > • Encuentra amigos en tus contactos: los números se codifican en tu teléfono y nunca se guardan
+  > • Sin anuncios ni rastreo
+  >
+  > WHOOWES PLUS Y PRO
+  > El plan Gratis incluye gastos, amigos y grupos ilimitados, más 3 escaneos de recibos con IA al mes. Plus añade 30 escaneos, el Añadido rápido con IA (escribe «Tacos 64 con Sam y Priya») y la exportación CSV. Pro añade escaneos ilimitados, el Asistente de división con IA y estadísticas mensuales de gastos. Las suscripciones se cobran a través de Google Play y se pueden cancelar cuando quieras.
+  >
+  > WhoOwes registra quién debe qué. No mueve dinero ni se conecta a tu banco.
+
+**Hindi**
+
+- App name: `WhoOwes: बिल बाँटें`
+- Short description:
+  > दोस्तों के साथ खर्च बाँटें। रसीद की फ़ोटो लें, AI आपके लिए बाँट देगा।
+- Full description:
+  > WhoOwes साझा खर्चों का हिसाब रखता है, ताकि किसी को याद न रखना पड़े कि किसने कितना दिया।
+  >
+  > कुछ भी बाँटें
+  > • सेकंडों में खर्च जोड़ें और उसे बराबर, रकम, प्रतिशत या चीज़ों के हिसाब से बाँटें
+  > • ट्रिप, रूममेट और डिनर के लिए ग्रुप, या किसी एक दोस्त के साथ सीधा बँटवारा
+  > • एक नज़र में देखें किसे आपको देना है और आपको किसे देना है
+  > • कोई भी मुद्रा: हर ग्रुप और खर्च अपनी मुद्रा में रहता है, और बकाया कभी मिलाया या बदला नहीं जाता
+  > • हिन्दी, अंग्रेज़ी, फ़्रेंच और स्पैनिश में
+  >
+  > रसीद की फ़ोटो लें
+  > • रसीद की फ़ोटो लें और AI हर चीज़, टैक्स और टिप पढ़ लेगा
+  > • बताएं किसने क्या लिया, और बँटवारा हो गया
+  >
+  > हिसाब चुकाएं
+  > • स्मार्ट सुझाव, जिनसे सबसे कम भुगतानों में पूरे ग्रुप का हिसाब हो जाए
+  > • भुगतान दर्ज करें, और पैसे मिलने पर आपका दोस्त पुष्टि करेगा
+  > • कोई भूल जाए तो प्यार से याद दिलाएं
+  >
+  > आपकी निजता सबसे पहले
+  > • फ़ोन नंबर से साइन इन, कोई पासवर्ड याद रखने की ज़रूरत नहीं
+  > • कॉन्टैक्ट्स से दोस्त ढूंढें: नंबर आपके फ़ोन पर ही बदल दिए जाते हैं और कभी सेव नहीं होते
+  > • कोई विज्ञापन नहीं, कोई ट्रैकिंग नहीं
+  >
+  > WHOOWES PLUS और PRO
+  > फ़्री प्लान में अनलिमिटेड खर्च, दोस्त और ग्रुप, साथ में हर महीने 3 AI रसीद स्कैन। Plus में 30 स्कैन, AI झटपट जोड़ें ("समोसे 120 सैम और प्रिया के साथ" लिखें) और CSV एक्सपोर्ट। Pro में अनलिमिटेड स्कैन, AI बँटवारा सहायक और हर महीने खर्च का विश्लेषण। सब्सक्रिप्शन Google Play से बिल होते हैं और कभी भी रद्द किए जा सकते हैं।
+  >
+  > WhoOwes सिर्फ़ हिसाब रखता है कि किसे कितना देना है। यह पैसे नहीं भेजता और आपके बैंक से नहीं जुड़ता।
+
+These translations (and the app's) were written by AI. Have a native speaker of each language read the listing and click through the app once before launch.
+
+### 5c. Countries
+
+**Test and release → Production → Countries / regions**: add the countries you want. A sensible start is English- and French-speaking Canada and the US, the UK, Ireland, Australia, New Zealand and India, then more once you see where people come from.
+
+Then match it in **Twilio → Verify → Geo permissions**: allow texts only to those countries, and turn on **Fraud Guard**. Sign-in texts cost much more in some countries, and fraudsters send thousands of sign-in requests to expensive numbers.
 
 ## 6. App content (Policy → App content)
 

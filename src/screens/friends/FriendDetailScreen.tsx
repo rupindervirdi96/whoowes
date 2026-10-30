@@ -5,9 +5,10 @@ import { RootScreenProps } from '../../types/navigation';
 import { useCurrentUser } from '../../hooks/useAuth';
 import { useExpenses } from '../../hooks/useExpenses';
 import { useSettlements } from '../../hooks/useSettlements';
-import { useBalanceWith } from '../../hooks/useBalances';
+import { useBalancesWith } from '../../hooks/useBalances';
 import { useFriends, useRemind, useRemoveFriend } from '../../hooks/useFriends';
 import { useShowModal } from '../../store/uiStore';
+import { useT } from '../../i18n';
 import { formatCurrency } from '../../utils/currency';
 import { firstName } from '../../utils/money';
 import Screen from '../../components/ui/Screen';
@@ -26,11 +27,12 @@ import SettlementRow from '../../components/SettlementRow';
 const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, navigation }) => {
   const { friendId } = route.params;
   const t = useTheme();
+  const { t: tr } = useT();
   const me = useCurrentUser()!;
   const { data: friends } = useFriends();
   const expensesQ = useExpenses();
   const { data: settlements = [] } = useSettlements();
-  const net = useBalanceWith(friendId);
+  const balances = useBalancesWith(friendId); // one per currency, main first
   const remind = useRemind();
   const remove = useRemoveFriend();
   const showModal = useShowModal();
@@ -43,9 +45,14 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
     shared[0]?.splits.find((s) => s.userId === friendId)?.user ??
     settlements.find((s) => s.fromUserId === friendId)?.fromUser ??
     settlements.find((s) => s.toUserId === friendId)?.toUser;
-  const name = friendUser?.name ?? 'Friend';
+  const name = friendUser?.name ?? tr('friend.fallbackName');
+  const first = firstName(name);
   const payments = settlements.filter((s) => s.fromUserId === friendId || s.toUserId === friendId);
   const isFriend = !!friends?.some((f) => f.friendId === friendId);
+
+  const owedToMe = balances.filter((b) => b.netBalance > 0);
+  const iOwe = balances.filter((b) => b.netBalance < 0);
+  const settled = balances.length === 0;
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -54,21 +61,24 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
           icon="add"
           variant="ghost"
           size={40}
-          accessibilityLabel={`Add an expense with ${firstName(name)}`}
+          accessibilityLabel={tr('friend.addExpenseWith', { name: first })}
           onPress={() => navigation.navigate('ManualExpense', { friendId })}
         />
       ),
     });
-  }, [navigation, name, friendId]);
+  }, [navigation, first, friendId, tr]);
 
   const confirmRemove = () =>
     showModal({
-      title: `Remove ${firstName(name)}?`,
-      body: net !== 0 ? 'You still have an open balance. Shared expenses stay in your history.' : 'Shared expenses stay in your history.',
-      confirmLabel: 'Remove',
+      title: tr('friend.removeTitle', { name: first }),
+      body: settled ? tr('friend.removeBody') : tr('friend.removeBodyOpen'),
+      confirmLabel: tr('common.remove'),
       variant: 'danger',
       onConfirm: () => remove.mutate(friendId, { onSuccess: () => navigation.goBack() }),
     });
+
+  // The first balance (main currency) drives the buttons; each other one is still listed.
+  const main = balances[0];
 
   return (
     <Screen refreshing={expensesQ.isRefetching} onRefresh={expensesQ.refetch}>
@@ -87,49 +97,71 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
       </View>
 
       <Card style={{ marginTop: t.spacing.xl }}>
-        {net === 0 ? (
+        {settled ? (
           <Text variant="bodyStrong" tone="positive">
-            You and {firstName(name)} are settled up
+            {tr('friend.settledWith', { name: first })}
           </Text>
         ) : (
-          <>
-            <Text variant="label" tone="tertiary">
-              {net > 0 ? `${firstName(name)} owes you` : `You owe ${firstName(name)}`}
-            </Text>
-            <Text variant="h1" tone={net > 0 ? 'positive' : 'negative'} tabular style={{ marginTop: 4 }}>
-              {formatCurrency(Math.abs(net))}
-            </Text>
-          </>
+          <View style={{ gap: 12 }}>
+            {owedToMe.length ? (
+              <View>
+                <Text variant="label" tone="tertiary">
+                  {tr('friend.owesYou', { name: first })}
+                </Text>
+                {owedToMe.map((b) => (
+                  <Text key={b.currency} variant="h1" tone="positive" tabular style={{ marginTop: 4 }}>
+                    {formatCurrency(b.netBalance, b.currency)}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+            {iOwe.length ? (
+              <View>
+                <Text variant="label" tone="tertiary">
+                  {tr('friend.youOwe', { name: first })}
+                </Text>
+                {iOwe.map((b) => (
+                  <Text key={b.currency} variant="h1" tone="negative" tabular style={{ marginTop: 4 }}>
+                    {formatCurrency(-b.netBalance, b.currency)}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+          </View>
         )}
         <View style={{ flexDirection: 'row', gap: 10, marginTop: t.spacing.lg }}>
-          {net > 0 ? (
+          {owedToMe.length ? (
             <Button
-              title="Remind"
+              title={tr('friend.remind')}
               icon="notifications-active"
               variant="secondary"
               style={{ flex: 1 }}
               loading={remind.isPending}
-              onPress={() => remind.mutate({ userId: friendId, name, amount: Math.abs(net) || undefined })}
+              onPress={() => remind.mutate({ userId: friendId, name, amount: owedToMe[0].netBalance, currency: owedToMe[0].currency })}
             />
           ) : null}
           <Button
-            title={net > 0 ? 'Record payment' : net < 0 ? 'Settle up' : 'Add expense'}
-            icon={net === 0 ? 'add' : net < 0 ? 'swap-horiz' : undefined}
+            title={settled ? tr('common.addExpense') : iOwe.length ? tr('hero.settleUp') : tr('friend.recordPayment')}
+            icon={settled ? 'add' : iOwe.length ? 'swap-horiz' : undefined}
             style={{ flex: 1 }}
             onPress={() =>
-              net === 0
+              settled || !main
                 ? navigation.navigate('ManualExpense', { friendId })
-                : navigation.navigate('SettleUp', { userId: friendId, amount: Math.abs(net) || undefined })
+                : navigation.navigate('SettleUp', {
+                    userId: friendId,
+                    amount: Math.abs((iOwe[0] ?? main).netBalance),
+                    currency: (iOwe[0] ?? main).currency,
+                  })
             }
           />
         </View>
       </Card>
 
-      <SectionHeader title="Shared expenses" />
+      <SectionHeader title={tr('friend.sharedExpenses')} />
       {expensesQ.isLoading ? (
         <SkeletonList rows={3} />
       ) : shared.length === 0 ? (
-        <EmptyState emoji="🧾" title="Nothing shared yet" body={`Expenses you split with ${firstName(name)} show up here.`} />
+        <EmptyState emoji="🧾" title={tr('friend.nothingShared')} body={tr('friend.nothingSharedBody', { name: first })} />
       ) : (
         <ListCard>
           {shared.map((e, i) => (
@@ -140,7 +172,7 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
 
       {payments.length > 0 ? (
         <>
-          <SectionHeader title="Payments" />
+          <SectionHeader title={tr('friend.payments')} />
           <ListCard>
             {payments.map((s, i) => (
               <SettlementRow key={s.id} settlement={s} myId={me.id} divider={i < payments.length - 1} />
@@ -150,7 +182,7 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
       ) : null}
 
       {isFriend ? (
-        <Button title="Remove friend" variant="ghost" icon="person-remove" onPress={confirmRemove} style={{ marginTop: t.spacing.xl }} />
+        <Button title={tr('friend.remove')} variant="ghost" icon="person-remove" onPress={confirmRemove} style={{ marginTop: t.spacing.xl }} />
       ) : null}
     </Screen>
   );

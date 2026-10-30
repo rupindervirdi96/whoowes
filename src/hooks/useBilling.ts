@@ -18,7 +18,8 @@ import * as Linking from 'expo-linking';
 import { BillingService } from '../services';
 import { StoreBilling } from '../services/storeBilling';
 import { QUERY_KEYS } from '../constants';
-import { PLANS, planIncludes } from '../billing/plans';
+import { PLANS, planIncludes, planName } from '../billing/plans';
+import { translate } from '../i18n';
 import type { ApiError, BillingInterval, Feature, PlanId, Subscription } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { useShowToast } from '../store/uiStore';
@@ -39,7 +40,7 @@ export function useEntitlements() {
   const plan: PlanId = sub?.plan ?? 'free';
   return {
     plan,
-    planName: PLANS[plan].name,
+    planName: planName(plan),
     subscription: sub,
     isLoading,
     isPaid: plan !== 'free',
@@ -120,7 +121,7 @@ export function useCheckout() {
         return { plan, completed: result.completed };
       }
       if (StoreBilling.unavailable) {
-        throw { message: `Subscriptions aren't available in this version yet.`, statusCode: 0 } satisfies ApiError;
+        throw { message: translate('billing.unavailableInVersion'), statusCode: 0 } satisfies ApiError;
       }
       const returnUrl = Linking.createURL('billing/return');
       const url = await BillingService.startCheckout(plan, interval, returnUrl);
@@ -133,9 +134,9 @@ export function useCheckout() {
     },
     onSuccess: ({ plan, completed }) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SUBSCRIPTION });
-      if (completed) showToast(`Welcome to WhoOwes ${PLANS[plan].name} ✨`, 'success');
+      if (completed) showToast(translate('toast.welcomePlan', { plan: PLANS[plan].name }), 'success');
     },
-    onError: (e: ApiError) => showToast(e.message ?? 'Checkout failed', 'error'),
+    onError: (e: ApiError) => showToast(e.message ?? translate('toast.checkoutFailed'), 'error'),
   });
 }
 
@@ -155,7 +156,7 @@ export function useManageSubscription() {
       if (url) await WebBrowser.openAuthSessionAsync(url, returnUrl);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SUBSCRIPTION }),
-    onError: (e: ApiError) => showToast(e.message ?? 'Could not open billing', 'error'),
+    onError: (e: ApiError) => showToast(e.message ?? translate('toast.couldNotOpenBilling'), 'error'),
   });
 }
 
@@ -166,9 +167,9 @@ export function useRestorePurchases() {
     mutationFn: () => StoreBilling.restore(),
     onSuccess: (sub) => {
       queryClient.setQueryData(QUERY_KEYS.SUBSCRIPTION, sub);
-      showToast(sub.plan === 'free' ? 'No active subscription found on this account.' : `Restored WhoOwes ${PLANS[sub.plan].name}`, sub.plan === 'free' ? 'info' : 'success');
+      showToast(sub.plan === 'free' ? translate('toast.noSubscriptionFound') : translate('toast.restored', { plan: PLANS[sub.plan].name }), sub.plan === 'free' ? 'info' : 'success');
     },
-    onError: (e: ApiError) => showToast(e.message ?? "Couldn't restore purchases", 'error'),
+    onError: (e: ApiError) => showToast(e.message ?? translate('toast.couldNotRestore'), 'error'),
   });
 }
 

@@ -5,6 +5,7 @@ import { CreateSettlementPayload, RespondSettlementPayload } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { useShowToast } from '../store/uiStore';
 import { invalidateMoney, MutationError } from './queryUtils';
+import { translate } from '../i18n';
 
 const useUserId = () => useAuthStore((s) => s.user?.id ?? '');
 
@@ -53,9 +54,9 @@ export function useCreateSettlement() {
     mutationFn: (payload: CreateSettlementPayload) => SettlementService.createSettlement(userId, payload),
     onSuccess: (s) => {
       invalidateMoney(queryClient);
-      showToast(`Payment recorded — ${s.toUser.name.split(' ')[0]} will confirm it`, 'success');
+      showToast(translate('toast.paymentRecorded', { name: s.toUser.name.split(' ')[0] }), 'success');
     },
-    onError: (e: MutationError) => showToast(e.message ?? 'Could not record payment', 'error'),
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotRecordPayment'), 'error'),
   });
 }
 
@@ -68,9 +69,9 @@ export function useRespondToSettlement() {
     onSuccess: (s) => {
       queryClient.setQueryData(QUERY_KEYS.SETTLEMENT(s.id), s);
       invalidateMoney(queryClient);
-      showToast(s.status === 'confirmed' ? 'Payment confirmed ✓' : 'Payment declined', s.status === 'confirmed' ? 'success' : 'warning');
+      showToast(translate(s.status === 'confirmed' ? 'toast.paymentConfirmed' : 'toast.paymentDeclined'), s.status === 'confirmed' ? 'success' : 'warning');
     },
-    onError: (e: MutationError) => showToast(e.message ?? 'Could not respond', 'error'),
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotRespond'), 'error'),
   });
 }
 
@@ -82,8 +83,8 @@ export function useCancelSettlement() {
     mutationFn: (settlementId: string) => SettlementService.cancelSettlement(userId, settlementId),
     onSuccess: () => {
       invalidateMoney(queryClient);
-      showToast('Payment cancelled', 'info');
+      showToast(translate('toast.paymentCancelled'), 'info');
     },
-    onError: (e: MutationError) => showToast(e.message ?? 'Could not cancel', 'error'),
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotCancel'), 'error'),
   });
 }

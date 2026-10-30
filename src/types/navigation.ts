@@ -43,7 +43,7 @@ export type RootStackParamList = {
   QuickAdd: { groupId?: string } | undefined;
 
   // Payments
-  SettleUp: { userId?: string; amount?: number; groupId?: string } | undefined;
+  SettleUp: { userId?: string; amount?: number; currency?: string; groupId?: string } | undefined;
   Settlements: undefined;
   SettlementDetail: { settlementId: string };
 

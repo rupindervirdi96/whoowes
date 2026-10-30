@@ -6,6 +6,7 @@ import { useTheme } from '../theme';
 import { formatCurrency } from '../utils/currency';
 import { formatSmartDate } from '../utils/date';
 import { firstName, settlementForMe } from '../utils/money';
+import { useT } from '../i18n';
 import Text from './ui/Text';
 import Icon from './ui/Icon';
 import { RowAmount } from './ui/ListRow';
@@ -13,10 +14,12 @@ import { RowAmount } from './ui/ListRow';
 /** One payment between me and someone else. Status shows as a quiet caption, not a pill. */
 const SettlementRow: React.FC<{ settlement: Settlement; myId: string; divider?: boolean }> = ({ settlement: s, myId, divider }) => {
   const t = useTheme();
+  const { t: tr } = useT();
   const navigation = useNavigation();
   const { outgoing, other } = settlementForMe(s, myId);
-  const title = outgoing ? `You paid ${firstName(other.name)}` : `${firstName(other.name)} paid you`;
-  const caption = s.status === 'pending' ? 'Pending' : s.status === 'rejected' ? 'Declined' : outgoing ? 'sent' : 'received';
+  const title = outgoing ? tr('payment.youPaid', { name: firstName(other.name) }) : tr('payment.paidYou', { name: firstName(other.name) });
+  const caption =
+    s.status === 'pending' ? tr('payment.pending') : s.status === 'rejected' ? tr('payment.declined') : outgoing ? tr('payment.sent') : tr('payment.received');
   const captionTone = s.status === 'pending' ? 'warning' : s.status === 'rejected' ? 'negative' : 'tertiary';
 
   return (

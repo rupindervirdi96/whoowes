@@ -15,6 +15,7 @@
  * In Expo Go the SDK runs in a preview mode without real purchases.
  */
 
+import { translate } from '../i18n';
 import { Linking, Platform } from 'react-native';
 import Purchases, { type PurchasesError, type PurchasesPackage } from 'react-native-purchases';
 import { REVENUECAT_ANDROID_KEY, REVENUECAT_IOS_KEY, USE_MOCK_API } from '../config';
@@ -33,13 +34,15 @@ export const packageIdFor = (plan: PaidPlan, interval: BillingInterval) => `${pl
 let configured = false;
 let identifiedAs: string | null = null;
 
+const storeLabel = () => translate(Platform.OS === 'ios' ? 'store.appStore' : 'store.googlePlay');
+
 function fail(message: string, code?: string): ApiError {
   return { message, statusCode: 0, code };
 }
 
 async function ensureIdentified() {
   const userId = useAuthStore.getState().user?.id;
-  if (!userId) throw fail('Please sign in again.');
+  if (!userId) throw fail(translate('billing.signInAgain'));
   await StoreBilling.identify(userId);
 }
 
@@ -99,7 +102,7 @@ export const StoreBilling = {
    */
   async purchase(plan: PaidPlan, interval: BillingInterval, current?: Subscription): Promise<{ completed: boolean; subscription?: Subscription }> {
     const pkg = (await this.packages())[packageIdFor(plan, interval)];
-    if (!pkg) throw fail("That plan isn't available right now. Please try again later.");
+    if (!pkg) throw fail(translate('billing.planUnavailable'));
 
     const change =
       Platform.OS === 'android' && current?.provider === 'play_store' && current.plan !== 'free' && current.productId
@@ -115,12 +118,12 @@ export const StoreBilling = {
       const e = err as PurchasesError;
       if (e?.code === Purchases.PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR || e?.userCancelled) return { completed: false };
       if (e?.code === Purchases.PURCHASES_ERROR_CODE.PAYMENT_PENDING_ERROR) {
-        throw fail('Your payment is pending. Your plan will switch on as soon as it goes through.', 'payment_pending');
+        throw fail(translate('billing.pending'), 'payment_pending');
       }
       if (e?.code === Purchases.PURCHASES_ERROR_CODE.PURCHASE_NOT_ALLOWED_ERROR) {
-        throw fail(`Purchases aren't allowed on this device. Check your ${this.storeName} account.`);
+        throw fail(translate('billing.notAllowed', { store: storeLabel() }));
       }
-      throw fail(e?.message || "The purchase didn't go through. Please try again.");
+      throw fail(e?.message || translate('billing.failed'));
     }
     return { completed: true, subscription: await syncWithServer() };
   },

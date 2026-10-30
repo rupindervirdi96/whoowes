@@ -5,6 +5,7 @@ import { AddFriendPayload } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { useShowToast } from '../store/uiStore';
 import type { MutationError } from './queryUtils';
+import { translate } from '../i18n';
 
 const useUserId = () => useAuthStore((s) => s.user?.id ?? '');
 
@@ -47,9 +48,9 @@ export function useAddFriend() {
     mutationFn: (payload: AddFriendPayload) => FriendService.addFriend(userId, payload),
     onSuccess: (f) => {
       invalidateFriendData(queryClient);
-      showToast(`Request sent to ${f.friendUser.name.split(' ')[0]}`, 'success');
+      showToast(translate('toast.requestSent', { name: f.friendUser.name.split(' ')[0] }), 'success');
     },
-    onError: (e: MutationError) => showToast(e.message ?? 'Could not send request', 'error'),
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotSendRequest'), 'error'),
   });
 }
 
@@ -61,9 +62,9 @@ export function useAcceptFriendRequest() {
     mutationFn: (requestId: string) => FriendService.acceptFriendRequest(userId, requestId),
     onSuccess: (f) => {
       invalidateFriendData(queryClient);
-      showToast(`You and ${f.friendUser.name.split(' ')[0]} are now friends`, 'success');
+      showToast(translate('toast.nowFriends', { name: f.friendUser.name.split(' ')[0] }), 'success');
     },
-    onError: (e: MutationError) => showToast(e.message ?? 'Could not accept', 'error'),
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotAccept'), 'error'),
   });
 }
 
@@ -83,9 +84,9 @@ export function useRemoveFriend() {
     mutationFn: (friendUserId: string) => FriendService.removeFriend(userId, friendUserId),
     onSuccess: () => {
       invalidateFriendData(queryClient);
-      showToast('Friend removed', 'info');
+      showToast(translate('toast.friendRemoved'), 'info');
     },
-    onError: (e: MutationError) => showToast(e.message ?? 'Could not remove friend', 'error'),
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotRemoveFriend'), 'error'),
   });
 }
 
@@ -102,9 +103,10 @@ export function useSearchUsers(query: string) {
 export function useRemind() {
   const showToast = useShowToast();
   return useMutation({
-    mutationFn: ({ userId, amount }: { userId: string; name: string; amount?: number }) => FriendService.remind(userId, amount),
-    onSuccess: (_, v) => showToast(`Nudged ${v.name.split(' ')[0]} 👋`, 'success'),
-    onError: (e: MutationError) => showToast(e.message ?? 'Could not send reminder', 'error'),
+    mutationFn: ({ userId, amount, currency }: { userId: string; name: string; amount?: number; currency?: string }) =>
+      FriendService.remind(userId, amount, currency),
+    onSuccess: (_, v) => showToast(translate('toast.nudged', { name: v.name.split(' ')[0] }), 'success'),
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotRemind'), 'error'),
   });
 }
 

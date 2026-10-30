@@ -1,25 +1,35 @@
 import React from 'react';
-import { TextInput, View } from 'react-native';
+import { Pressable, TextInput, View } from 'react-native';
 import { useTheme } from '../../theme';
-import { getCurrencySymbol } from '../../utils/currency';
+import { useT } from '../../i18n';
+import { cleanAmountInput, currencyDecimals, getCurrencySymbol } from '../../utils/currency';
 import Text from './Text';
+import Icon from './Icon';
 
 interface AmountInputProps {
   value: string;
   onChangeText: (v: string) => void;
-  currency?: string;
+  currency: string;
+  /** Makes the currency tappable (opens a currency picker). */
+  onCurrencyPress?: () => void;
   autoFocus?: boolean;
   label?: string;
 }
 
 /** Big, centered money input used at the top of money-entry screens. */
-const AmountInput: React.FC<AmountInputProps> = ({ value, onChangeText, currency = 'USD', autoFocus, label }) => {
+const AmountInput: React.FC<AmountInputProps> = ({ value, onChangeText, currency, onCurrencyPress, autoFocus, label }) => {
   const t = useTheme();
-  const clean = (v: string) => {
-    const normalized = v.replace(',', '.').replace(/[^0-9.]/g, '');
-    const [whole, ...rest] = normalized.split('.');
-    return rest.length ? `${whole}.${rest.join('').slice(0, 2)}` : whole;
-  };
+  const { t: tr } = useT();
+  const decimals = currencyDecimals(currency);
+  const placeholder = decimals ? `0.${'0'.repeat(decimals)}` : '0';
+  const symbol = getCurrencySymbol(currency);
+
+  const symbolText = (
+    <Text variant="h1" tone={value ? 'default' : 'tertiary'} style={{ marginRight: 2 }}>
+      {symbol}
+    </Text>
+  );
+
   return (
     <View style={{ alignItems: 'center', paddingVertical: t.spacing.base }}>
       {label ? (
@@ -28,31 +38,54 @@ const AmountInput: React.FC<AmountInputProps> = ({ value, onChangeText, currency
         </Text>
       ) : null}
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Text variant="h1" tone={value ? 'default' : 'tertiary'} style={{ marginRight: 2 }}>
-          {getCurrencySymbol(currency)}
-        </Text>
+        {onCurrencyPress ? null : symbolText}
         <TextInput
           value={value}
-          onChangeText={(v) => onChangeText(clean(v))}
-          placeholder="0.00"
+          onChangeText={(v) => onChangeText(cleanAmountInput(v, currency))}
+          placeholder={placeholder}
           placeholderTextColor={t.colors.textTertiary}
-          keyboardType="decimal-pad"
+          keyboardType={decimals ? 'decimal-pad' : 'number-pad'}
           autoFocus={autoFocus}
           selectionColor={t.colors.primary}
-          accessibilityLabel="Amount"
+          accessibilityLabel={tr('amount.label')}
           style={{
             fontFamily: t.fonts.extrabold,
             fontSize: 48,
             letterSpacing: -1.5,
             color: t.colors.text,
-            // Size to the digits so the currency symbol stays next to them
+            // Size to the digits so the currency stays next to them
             // (web would otherwise stretch the input to full width).
-            width: Math.max(90, (value || '0.00').length * 30 + 16),
+            width: Math.max(90, (value || placeholder).length * 30 + 16),
             paddingVertical: 0,
             textAlign: 'center',
           }}
         />
       </View>
+      {onCurrencyPress ? (
+        <Pressable
+          onPress={onCurrencyPress}
+          accessibilityRole="button"
+          accessibilityLabel={tr('amount.changeCurrency', { currency })}
+          hitSlop={8}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            marginTop: 6,
+            paddingHorizontal: 12,
+            height: 32,
+            borderRadius: 16,
+            backgroundColor: t.colors.surfaceAlt,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Text variant="label">
+            {currency}
+            {symbol !== currency ? ` · ${symbol}` : ''}
+          </Text>
+          <Icon name="expand-more" size={18} color={t.colors.textSecondary} />
+        </Pressable>
+      ) : null}
     </View>
   );
 };

@@ -3,21 +3,10 @@
  */
 
 import type { ExpenseCategory } from '../types';
+import { translate, type TKey } from '../i18n';
 
 export const APP_NAME = 'WhoOwes';
 export const APP_VERSION = '2.0.0';
-
-export const DEFAULT_CURRENCY = 'USD';
-
-export const CURRENCIES: Record<string, { symbol: string; name: string }> = {
-  USD: { symbol: '$', name: 'US Dollar' },
-  EUR: { symbol: '€', name: 'Euro' },
-  GBP: { symbol: '£', name: 'British Pound' },
-  INR: { symbol: '₹', name: 'Indian Rupee' },
-  CAD: { symbol: 'CA$', name: 'Canadian Dollar' },
-  AUD: { symbol: 'A$', name: 'Australian Dollar' },
-  JPY: { symbol: '¥', name: 'Japanese Yen' },
-};
 
 export const STORAGE_KEYS = {
   AUTH_TOKEN: '@whoowes/auth_token',
@@ -53,7 +42,9 @@ export const MONEY_QUERY_ROOTS = [['expenses'], ['settlements'], ['balances'], [
 
 export interface CategoryMeta {
   id: ExpenseCategory;
-  label: string;
+  labelKey: TKey;
+  /** One-word label for small chips. */
+  shortKey: TKey;
   icon: string; // MaterialIcons glyph
   emoji: string;
   /** Light / dark tint pair for the category chip. */
@@ -61,15 +52,18 @@ export interface CategoryMeta {
 }
 
 export const EXPENSE_CATEGORIES: CategoryMeta[] = [
-  { id: 'food', label: 'Food & drink', icon: 'restaurant', emoji: '🍜', color: { light: '#EB6834', dark: '#D95926' } },
-  { id: 'transport', label: 'Transport', icon: 'directions-car', emoji: '🚕', color: { light: '#2A78D6', dark: '#3987E5' } },
-  { id: 'accommodation', label: 'Stay & rent', icon: 'home', emoji: '🏠', color: { light: '#6250D6', dark: '#9085E9' } },
-  { id: 'entertainment', label: 'Fun', icon: 'local-activity', emoji: '🎟️', color: { light: '#E87BA4', dark: '#D55181' } },
-  { id: 'utilities', label: 'Bills & utilities', icon: 'bolt', emoji: '💡', color: { light: '#1BAF7A', dark: '#199E70' } },
-  { id: 'shopping', label: 'Shopping', icon: 'shopping-bag', emoji: '🛍️', color: { light: '#EDA100', dark: '#C98500' } },
-  { id: 'health', label: 'Health', icon: 'favorite', emoji: '💊', color: { light: '#008300', dark: '#008300' } },
-  { id: 'other', label: 'Other', icon: 'receipt-long', emoji: '🧾', color: { light: '#E34948', dark: '#E66767' } },
+  { id: 'food', labelKey: 'category.food', shortKey: 'category.food.short', icon: 'restaurant', emoji: '🍜', color: { light: '#EB6834', dark: '#D95926' } },
+  { id: 'transport', labelKey: 'category.transport', shortKey: 'category.transport.short', icon: 'directions-car', emoji: '🚕', color: { light: '#2A78D6', dark: '#3987E5' } },
+  { id: 'accommodation', labelKey: 'category.accommodation', shortKey: 'category.accommodation.short', icon: 'home', emoji: '🏠', color: { light: '#6250D6', dark: '#9085E9' } },
+  { id: 'entertainment', labelKey: 'category.entertainment', shortKey: 'category.entertainment.short', icon: 'local-activity', emoji: '🎟️', color: { light: '#E87BA4', dark: '#D55181' } },
+  { id: 'utilities', labelKey: 'category.utilities', shortKey: 'category.utilities.short', icon: 'bolt', emoji: '💡', color: { light: '#1BAF7A', dark: '#199E70' } },
+  { id: 'shopping', labelKey: 'category.shopping', shortKey: 'category.shopping.short', icon: 'shopping-bag', emoji: '🛍️', color: { light: '#EDA100', dark: '#C98500' } },
+  { id: 'health', labelKey: 'category.health', shortKey: 'category.health.short', icon: 'favorite', emoji: '💊', color: { light: '#008300', dark: '#008300' } },
+  { id: 'other', labelKey: 'category.other', shortKey: 'category.other.short', icon: 'receipt-long', emoji: '🧾', color: { light: '#E34948', dark: '#E66767' } },
 ];
+
+/** "Food & drink" in the app language. */
+export const categoryLabel = (id: ExpenseCategory) => translate(CATEGORY_BY_ID[id].labelKey);
 
 /**
  * Fixed order for stacked / category charts. These colors are the validated
@@ -93,10 +87,10 @@ export const CATEGORY_BY_ID: Record<ExpenseCategory, CategoryMeta> = Object.from
 ) as Record<ExpenseCategory, CategoryMeta>;
 
 export const SPLIT_TYPES = [
-  { id: 'equal', label: 'Equally', icon: 'drag-handle', description: 'Everyone pays the same' },
-  { id: 'custom', label: 'Exact amounts', icon: 'tune', description: 'Type what each person owes' },
-  { id: 'percentage', label: 'Percentages', icon: 'percent', description: 'Split by percent' },
-] as const;
+  { id: 'equal', labelKey: 'split.equal', icon: 'drag-handle' },
+  { id: 'custom', labelKey: 'split.custom', icon: 'tune' },
+  { id: 'percentage', labelKey: 'split.percentage', icon: 'percent' },
+] as const satisfies ReadonlyArray<{ id: string; labelKey: TKey; icon: string }>;
 
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 

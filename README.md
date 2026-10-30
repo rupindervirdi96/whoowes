@@ -19,6 +19,8 @@ Expo + React Native app, plus a small Node server (`server/`) for **Stripe subsc
 - **Settle up**: suggested person + amount, payment method, confirm/decline flow
 - Expenses: equal / exact / percentage splits, group picker, date, notes
 - Spending **Insights**: your share per month, by category, who you split with most
+- **Any currency**: every expense, payment and group has its own currency (all ISO 4217 currencies). Your default comes from your phone's region and can be changed in Account. Balances and totals are kept per currency and never converted
+- **English, French, Spanish and Hindi**: the app follows the phone's language, or pick one in Account (or on the first screen). Server messages, AI notes and sign-in texts come back in the same language
 
 **Paid features (Plus / Pro)**
 
@@ -26,7 +28,7 @@ Expo + React Native app, plus a small Node server (`server/`) for **Stripe subsc
 |---|---|---|---|
 | Expenses, groups, settle-ups | Unlimited | Unlimited | Unlimited |
 | **AI receipt scanning** (photo or PDF) | 3 / month | 30 / month | Unlimited |
-| **AI Quick Add** — "Tacos $64 with Sam, I paid" | — | ✓ | ✓ |
+| **AI Quick Add** — "Tacos 64 with Sam, I paid" | — | ✓ | ✓ |
 | CSV export | — | ✓ | ✓ |
 | **AI Split Assistant** — "Sam had the wine, split the rest" | — | — | ✓ |
 | **Monthly AI insights** | — | — | ✓ |
@@ -146,19 +148,23 @@ The server enforces plans: every AI endpoint checks the caller's plan and monthl
 
 | Area | Endpoints |
 |---|---|
-| Sign-in | `POST /auth/phone/start` `{ phone }` · `POST /auth/phone/verify` `{ phone, code, name? }` → `{ user, token }` (30-day session) |
-| Me | `GET/PATCH/DELETE /me` (delete anonymises the account, removes receipts, and cancels a Stripe subscription; store subscriptions are cancelled by the user in the store) |
+| Sign-in | `POST /auth/phone/start` `{ phone }` · `POST /auth/phone/verify` `{ phone, code, name?, currency? }` → `{ user, token }` (30-day session) |
+| Me | `GET/PATCH/DELETE /me` (`PATCH` takes `name`, `email`, `currency`; delete anonymises the account, removes receipts, and cancels a Stripe subscription; store subscriptions are cancelled by the user in the store) |
 | Friends | `GET /friends` · `GET /friends/requests` · `POST /friends` · `POST /friends/requests/:id/accept` / `decline` · `DELETE /friends/:userId` · `GET /users/search?q=` |
 | Contacts | `POST /contacts/match` `{ hashes: sha256(E.164)[] }`: the server never sees raw numbers |
 | Reminders | `POST /friends/:userId/remind` · `GET /reminders` · `POST /reminders/:id/dismiss` |
-| Groups | `GET/POST /groups` · `GET/DELETE /groups/:id` · `POST /groups/:id/members` · `DELETE /groups/:id/members/:userId` |
+| Groups | `GET/POST /groups` · `GET/PATCH/DELETE /groups/:id` (`PATCH`: name, description, currency) · `POST /groups/:id/members` · `DELETE /groups/:id/members/:userId` |
 | Expenses | `GET /expenses?groupId=` · `GET/DELETE /expenses/:id` · `POST /expenses` · `POST /expenses/:id/splits/:userId/paid` |
 | Payments | `GET /settlements?groupId=` · `GET /settlements/pending` · `POST /settlements` · `POST /settlements/:id/respond` · `DELETE /settlements/:id` |
 | Receipts & AI | `POST /ai/receipts/parse` · `GET/PATCH /receipts/:id` · `POST /ai/expenses/quick-add` · `POST /ai/receipts/assign` · `POST /ai/insights` |
 | Billing | `GET /billing/subscription` · `POST /billing/sync` (after a store purchase) · `POST /billing/checkout` · `POST /billing/portal` · `POST /webhooks/revenuecat` · `POST /webhooks/stripe` |
 | Public pages | `GET /privacy` · `GET /terms` · `GET /delete-account` (contact address from `SUPPORT_EMAIL`) |
 
-Money is stored as integer cents. Sign-in code sends are rate-limited per number and per IP (SMS pumping costs real money); the limiter is in-memory, so move it to a shared store such as Redis if you run more than one server instance.
+Money is stored as integer cents with an ISO 4217 currency on every expense and payment. Without one, the server uses the group's currency, then the user's, then USD. Group totals come back per currency (`totals`).
+
+Every request carries `Accept-Language` (en, fr, es or hi). The server translates its error messages (`server/src/i18n.ts`), asks Twilio for the sign-in text in that language, and has the AI write receipt notes, Quick Add notes and insights in it.
+
+Sign-in code sends are rate-limited per number and per IP (SMS pumping costs real money); the limiter is in-memory, so move it to a shared store such as Redis if you run more than one server instance.
 
 ### AI
 
@@ -180,6 +186,7 @@ Photos are resized to 1600px JPEG on the phone before upload (this also converts
 - **Push notifications.** Reminders and payment confirmations show up when people open the app. Push needs a development or production build (not Expo Go) plus `expo-notifications`.
 - **Database backups.** Turn on backups for the free Atlas cluster (cluster → **Backup**): Atlas then takes a daily snapshot and keeps the last four. Paid tiers add continuous, point-in-time backups.
 - **iPhone subscriptions.** The RevenueCat code already handles iOS; add the App Store app in RevenueCat and set `EXPO_PUBLIC_REVENUECAT_IOS_KEY`.
+- **Translations.** French, Spanish and Hindi were written by AI. Have a native speaker click through the app in each language. New text goes in `src/i18n/locales/en.ts` first; TypeScript then lists every language that's missing it.
 - **Privacy policy and terms.** The server serves drafts at `/privacy` and `/terms`, written from what the app actually does. Have them checked before you rely on them.
 - **Reviewer sign-in.** `REVIEW_PHONE` + `REVIEW_CODE` let store reviewers in without a text message. Change the code after each review, or clear both to turn it off.
 
@@ -198,7 +205,8 @@ src/
   billing/plans.ts           Plan catalogue + feature gates (mirrors server/src/plans.ts)
   hooks/                     React Query hooks; useBilling (entitlements, checkout, paywall), useAI
   services/                  impl.ts picks api/live.ts (server) or mock/* (demo); ai, billing, contacts, phoneAuth
-  utils/                     balanceEngine (net positions, debt simplification), splitEngine, insights, csv, phone
+  utils/                     balanceEngine (per-currency balances, debt simplification), splitEngine, insights, csv, phone, currency
+  i18n/                      useT() / translate(), locales/{en,fr,es,hi}.ts, generated currency and country names
 server/
   src/db/                    MongoDB connection, document shapes and indexes (local MongoDB in development)
   src/domain/                Permission checks, money helpers, JSON serializers
@@ -223,6 +231,7 @@ The owl's brow is a **W**; its pupils are **split coins**. Edit `assets/brand/ow
 | `npm run typecheck` | TypeScript check |
 | `npm run icons` | Regenerate app icons from the brand SVG |
 | `npm run store-assets` | Google Play icon (512×512) and feature graphic (1024×500) into `assets/store/` |
+| `npm run locale-data` | Regenerate currency and country names in every app language (`src/i18n/currencies.ts`, `countries.ts`) |
 | `npm run server:dev` | Start the API server (from the repo root) |
 | `cd server && npm run stripe:setup` | Create Stripe products/prices |
 | `cd server && npm run stripe:listen` | Forward Stripe webhooks to localhost |

@@ -14,9 +14,12 @@ import ListRow from '../../components/ui/ListRow';
 import Badge from '../../components/ui/Badge';
 import { SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
+import { useT } from '../../i18n';
+import { INVITE_URL } from '../../config';
 
 const AddFriendScreen: React.FC<RootScreenProps<'AddFriend'>> = () => {
   const t = useTheme();
+  const { t: tr } = useT();
   const [query, setQuery] = useState('');
   const [sent, setSent] = useState<Set<string>>(new Set());
   const { data: results = [], isFetching } = useSearchUsers(query);
@@ -35,7 +38,7 @@ const AddFriendScreen: React.FC<RootScreenProps<'AddFriend'>> = () => {
         icon="search"
         value={query}
         onChangeText={setQuery}
-        placeholder="Name, email or phone"
+        placeholder={tr('addFriend.placeholder')}
         autoFocus
         autoCapitalize="none"
         autoCorrect={false}
@@ -43,20 +46,18 @@ const AddFriendScreen: React.FC<RootScreenProps<'AddFriend'>> = () => {
 
       {query.trim().length < 2 ? (
         <>
-          <EmptyState emoji="🤝" title="Find your people" body="Search by phone number or email. Names find people you already share a group with." />
+          <EmptyState emoji="🤝" title={tr('addFriend.empty.title')} body={tr('addFriend.empty.body')} />
           <Card variant="alt" style={{ marginTop: t.spacing.base }}>
-            <Text variant="bodyStrong">Not on WhoOwes yet?</Text>
+            <Text variant="bodyStrong">{tr('addFriend.notOn')}</Text>
             <Text tone="secondary" style={{ marginTop: 4 }}>
-              Send them an invite — you can start splitting as soon as they join.
+              {tr('addFriend.notOnBody')}
             </Text>
             <Button
-              title="Share invite link"
+              title={tr('addFriend.share')}
               icon="ios-share"
               variant="secondary"
               style={{ marginTop: 12 }}
-              onPress={() =>
-                Share.share({ message: 'Join me on WhoOwes so we can split bills without the awkward math 🦉 https://whoowes.app' })
-              }
+              onPress={() => Share.share({ message: tr('invite.message', { url: INVITE_URL }) })}
             />
           </Card>
         </>
@@ -64,9 +65,9 @@ const AddFriendScreen: React.FC<RootScreenProps<'AddFriend'>> = () => {
         <SkeletonList rows={3} />
       ) : results.length === 0 ? (
         <View>
-          <EmptyState emoji="🔍" title="No one found" body={`Nobody matches “${query}”.`} />
+          <EmptyState emoji="🔍" title={tr('addFriend.noneFound')} body={tr('addFriend.nobodyMatches', { query })} />
           {looksLikeContact ? (
-            <Button title={`Send request to ${query.trim()}`} onPress={() => send({ emailOrPhone: query.trim() }, query.trim())} loading={add.isPending} fullWidth />
+            <Button title={tr('addFriend.sendTo', { who: query.trim() })} onPress={() => send({ emailOrPhone: query.trim() }, query.trim())} loading={add.isPending} fullWidth />
           ) : null}
         </View>
       ) : (
@@ -83,10 +84,10 @@ const AddFriendScreen: React.FC<RootScreenProps<'AddFriend'>> = () => {
                 subtitle={u.email || undefined}
                 trailing={
                   already ? (
-                    <Badge label="Friends" tone="positive" icon="check" />
+                    <Badge label={tr('addFriend.friends')} tone="positive" icon="check" />
                   ) : (
                     <Button
-                      title={isSent ? 'Sent' : 'Add'}
+                      title={isSent ? tr('addFriend.sent') : tr('common.add')}
                       size="sm"
                       variant={isSent ? 'secondary' : 'primary'}
                       disabled={isSent}

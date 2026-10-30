@@ -5,6 +5,7 @@ import { CreateExpensePayload } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { useShowToast } from '../store/uiStore';
 import { invalidateMoney, MutationError } from './queryUtils';
+import { translate } from '../i18n';
 
 export function useExpenses(groupId?: string) {
   const userId = useAuthStore((s) => s.user?.id ?? '');
@@ -35,9 +36,9 @@ export function useCreateExpense() {
     },
     onSuccess: (e) => {
       invalidateMoney(queryClient);
-      showToast(`Added “${e.title}”`, 'success');
+      showToast(translate('toast.expenseAdded', { title: e.title }), 'success');
     },
-    onError: (e: MutationError) => showToast(e.message ?? 'Could not add expense', 'error'),
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotAddExpense'), 'error'),
   });
 }
 
@@ -48,9 +49,9 @@ export function useDeleteExpense() {
     mutationFn: (expenseId: string) => ExpenseService.deleteExpense(expenseId),
     onSuccess: () => {
       invalidateMoney(queryClient);
-      showToast('Expense deleted', 'info');
+      showToast(translate('toast.expenseDeleted'), 'info');
     },
-    onError: (e: MutationError) => showToast(e.message ?? 'Could not delete expense', 'error'),
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotDeleteExpense'), 'error'),
   });
 }
 
@@ -63,8 +64,8 @@ export function useMarkSplitPaid() {
     onSuccess: (updated) => {
       queryClient.setQueryData(QUERY_KEYS.EXPENSE(updated.id), updated);
       invalidateMoney(queryClient);
-      showToast('Marked as paid', 'success');
+      showToast(translate('toast.markedPaid'), 'success');
     },
-    onError: (e: MutationError) => showToast(e.message ?? 'Could not update', 'error'),
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotUpdate'), 'error'),
   });
 }

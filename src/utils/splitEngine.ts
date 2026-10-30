@@ -12,6 +12,7 @@
 
 import { ExpenseItem, ExpenseSplit, SplitType, User } from '../types';
 import { roundToCents, distributeEvenly } from './currency';
+import { translate } from '../i18n';
 
 // ─── Input Types ──────────────────────────────────────────────────────────────
 
@@ -25,6 +26,8 @@ export interface EqualSplitInput {
   total: number;
   participants: SplitParticipant[];
   paidBy: string;
+  /** The currency's decimals (0 for yen): shares are whole units of it. Default 2. */
+  decimals?: number;
 }
 
 export interface CustomSplitInput {
@@ -39,6 +42,7 @@ export interface PercentageSplitInput {
   total: number;
   assignments: Array<{ userId: string; user: User; percentage: number }>;
   paidBy: string;
+  decimals?: number;
 }
 
 export interface ItemBasedSplitInput {
@@ -92,7 +96,7 @@ function calculateEqualSplit(input: EqualSplitInput): SplitResult {
   }
 
   // Distribute evenly and give any cent remainder to the last person
-  const amounts = distributeEvenly(total, participants.length);
+  const amounts = distributeEvenly(total, participants.length, input.decimals ?? 2);
 
   const splits: ExpenseSplit[] = participants.map((p, index) => ({
     userId: p.userId,
@@ -153,20 +157,17 @@ function calculatePercentageSplit(input: PercentageSplitInput): SplitResult {
     };
   }
 
-  // Calculate amounts; give rounding remainder to the last person
-  const rawAmounts = assignments.map((a) =>
-    Math.floor((a.percentage / 100) * total * 100),
-  );
+  // Calculate amounts in the currency's smallest unit; give rounding remainder to the last person
+  const f = 10 ** (input.decimals ?? 2);
+  const rawAmounts = assignments.map((a) => Math.floor((a.percentage / 100) * total * f));
   const roundedTotal = rawAmounts.reduce((sum, a) => sum + a, 0);
-  const remainder = Math.round(total * 100) - roundedTotal;
+  const remainder = Math.round(total * f) - roundedTotal;
 
   const splits: ExpenseSplit[] = assignments.map((a, i) => ({
     userId: a.userId,
     user: a.user,
     percentage: a.percentage,
-    amount: roundToCents(
-      (rawAmounts[i] + (i === assignments.length - 1 ? remainder : 0)) / 100,
-    ),
+    amount: roundToCents((rawAmounts[i] + (i === assignments.length - 1 ? remainder : 0)) / f),
     paid: a.userId === paidBy,
   }));
 
@@ -232,13 +233,15 @@ function calculateItemBasedSplit(input: ItemBasedSplitInput): SplitResult {
 /**
  * Splits receipt items between people, then shares tax/tip in proportion to
  * what each person ordered. Unassigned items are shared by everyone.
- * Works in integer cents and hands leftover cents to the largest shares, so
- * the result always sums exactly to items + extras.
+ * Works in the currency's smallest unit (cents, or whole yen with decimals = 0)
+ * and hands leftover units to the largest shares, so the result always sums
+ * exactly to items + extras.
  */
 export function splitReceiptItems(
   items: Array<{ price: number; quantity: number; assignedTo: string[] }>,
   participantIds: string[],
   extras: number,
+  decimals = 2,
 ): Record<string, number> {
   const people = participantIds.length ? participantIds : [];
   const raw: Record<string, number> = Object.fromEntries(people.map((id) => [id, 0]));
@@ -256,28 +259,24 @@ export function splitReceiptItems(
     raw[id] += itemsTotal > 0 ? (raw[id] / itemsTotal) * extras : extras / people.length;
   }
 
-  const totalCents = Math.round((itemsTotal + extras) * 100);
-  const floors = people.map((id) => ({ id, cents: Math.floor(raw[id] * 100), frac: raw[id] * 100 - Math.floor(raw[id] * 100) }));
-  let leftover = totalCents - floors.reduce((s, f) => s + f.cents, 0);
+  const unit = 10 ** decimals;
+  const totalUnits = Math.round((itemsTotal + extras) * unit);
+  const floors = people.map((id) => ({ id, units: Math.floor(raw[id] * unit), frac: raw[id] * unit - Math.floor(raw[id] * unit) }));
+  let leftover = totalUnits - floors.reduce((s, f) => s + f.units, 0);
   floors.sort((a, b) => b.frac - a.frac);
-  for (let i = 0; leftover > 0; i = (i + 1) % floors.length, leftover--) floors[i].cents += 1;
+  for (let i = 0; leftover > 0; i = (i + 1) % floors.length, leftover--) floors[i].units += 1;
 
-  return Object.fromEntries(floors.map((f) => [f.id, f.cents / 100]));
+  return Object.fromEntries(floors.map((f) => [f.id, roundToCents(f.units / unit)]));
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Returns display-friendly label for a split type.
+ * Returns display-friendly label for a split type, in the app language.
  */
 export function getSplitTypeLabel(type: SplitType): string {
-  const labels: Record<SplitType, string> = {
-    equal: 'Split Equally',
-    custom: 'Custom Amounts',
-    percentage: 'By Percentage',
-    item_based: 'By Item',
-  };
-  return labels[type];
+  const keys = { equal: 'split.equal', custom: 'split.custom', percentage: 'split.percentage', item_based: 'split.item_based' } as const;
+  return translate(keys[type]);
 }
 
 /**

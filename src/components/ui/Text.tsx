@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text as RNText, TextProps as RNTextProps, TextStyle } from 'react-native';
 import { useTheme, TypeVariant, FontWeightName, Palette } from '../../theme';
+import { useLanguage } from '../../i18n';
 
 export type TextTone =
   | 'default'
@@ -14,6 +15,18 @@ export type TextTone =
   | 'onPrimary'
   | 'hero'
   | 'heroMuted';
+
+/**
+ * Plus Jakarta Sans has no Devanagari letters. For Hindi the phone's own font is
+ * used (it covers both scripts), with the weight set directly instead.
+ */
+const SYSTEM_WEIGHT: Record<FontWeightName, TextStyle['fontWeight']> = {
+  regular: '400',
+  medium: '500',
+  semibold: '600',
+  bold: '700',
+  extrabold: '800',
+};
 
 const TONE_TO_COLOR: Record<TextTone, keyof Palette> = {
   default: 'text',
@@ -53,13 +66,16 @@ const Text: React.FC<TextProps> = ({
   ...rest
 }) => {
   const t = useTheme();
+  const systemFont = useLanguage() === 'hi';
   const scale = t.type[variant];
+  const fontName = weight ?? scale.font;
   return (
     <RNText
       {...rest}
       style={[
         {
-          fontFamily: t.fonts[weight ?? scale.font],
+          fontFamily: systemFont ? undefined : t.fonts[fontName],
+          fontWeight: systemFont ? SYSTEM_WEIGHT[fontName] : undefined,
           fontSize: scale.fontSize,
           lineHeight: scale.lineHeight,
           letterSpacing: scale.letterSpacing,

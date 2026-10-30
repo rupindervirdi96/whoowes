@@ -5,7 +5,10 @@ import { useTheme } from '../../theme';
 import { useFriends, useFriendRequests, useAcceptFriendRequest, useDeclineFriendRequest } from '../../hooks/useFriends';
 import { useBalances } from '../../hooks/useBalances';
 import { useContactMatches } from '../../hooks/useContacts';
-import { formatCurrency } from '../../utils/currency';
+import { balancesByPerson } from '../../utils/balanceEngine';
+import { useMyCurrency } from '../../hooks/useCurrency';
+import { useT } from '../../i18n';
+import BalanceAmounts, { balanceDirection } from '../../components/BalanceAmounts';
 import Screen from '../../components/ui/Screen';
 import TabHeader from '../../components/ui/TabHeader';
 import IconButton from '../../components/ui/IconButton';
@@ -14,7 +17,7 @@ import { ListCard } from '../../components/ui/Card';
 import Avatar from '../../components/ui/Avatar';
 import Button from '../../components/ui/Button';
 import Icon from '../../components/ui/Icon';
-import ListRow, { RowAmount, SectionHeader } from '../../components/ui/ListRow';
+import ListRow, { SectionHeader } from '../../components/ui/ListRow';
 import { SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 
@@ -22,7 +25,9 @@ const SEARCH_FROM = 6; // show search once the list is long enough to need it
 
 const FriendsScreen: React.FC = () => {
   const t = useTheme();
+  const { t: tr } = useT();
   const navigation = useNavigation();
+  const myCurrency = useMyCurrency();
   const [search, setSearch] = useState('');
   const friendsQ = useFriends();
   const { data: requests } = useFriendRequests();
@@ -31,14 +36,18 @@ const FriendsScreen: React.FC = () => {
   const accept = useAcceptFriendRequest();
   const decline = useDeclineFriendRequest();
 
-  const netFor = (id: string) => balanceData?.balances.find((b) => b.userId === id)?.netBalance ?? 0;
+  // Each friend's open balances, one per currency.
+  const byPerson = useMemo(() => balancesByPerson(balanceData?.balances ?? [], myCurrency), [balanceData, myCurrency]);
+  const amountsFor = (id: string) => (byPerson.get(id) ?? []).map((b) => ({ currency: b.currency, amount: b.netBalance }));
+  // For sorting only: people with open balances first, biggest first in their main currency.
+  const weight = (id: string) => Math.abs(byPerson.get(id)?.[0]?.netBalance ?? 0);
   const friends = friendsQ.data ?? [];
 
   const list = useMemo(() => {
     const q = search.trim().toLowerCase();
     return friends
       .filter((f) => !q || f.friendUser.name.toLowerCase().includes(q) || f.friendUser.email.toLowerCase().includes(q))
-      .sort((a, b) => Math.abs(netFor(b.friendId)) - Math.abs(netFor(a.friendId)) || a.friendUser.name.localeCompare(b.friendUser.name));
+      .sort((a, b) => weight(b.friendId) - weight(a.friendId) || a.friendUser.name.localeCompare(b.friendUser.name));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [friends, balanceData, search]);
 
@@ -49,12 +58,12 @@ const FriendsScreen: React.FC = () => {
   return (
     <Screen edges={['top']} refreshing={friendsQ.isRefetching} onRefresh={friendsQ.refetch}>
       <TabHeader
-        title="Friends"
-        right={<IconButton icon="person-add-alt" variant="soft" accessibilityLabel="Add a friend" onPress={() => navigation.navigate('AddFriend')} />}
+        title={tr('tab.friends')}
+        right={<IconButton icon="person-add-alt" variant="soft" accessibilityLabel={tr('friends.addFriend')} onPress={() => navigation.navigate('AddFriend')} />}
       />
 
       {friends.length >= SEARCH_FROM ? (
-        <Input icon="search" value={search} onChangeText={setSearch} placeholder="Search friends" autoCorrect={false} />
+        <Input icon="search" value={search} onChangeText={setSearch} placeholder={tr('friends.search')} autoCorrect={false} />
       ) : null}
 
       {/* Contacts discovery */}
@@ -65,12 +74,8 @@ const FriendsScreen: React.FC = () => {
               <Icon name="contacts" size={20} color={t.colors.primary} />
             </View>
           }
-          title="Find friends from contacts"
-          subtitle={
-            newContacts > 0
-              ? `${newContacts} ${newContacts === 1 ? 'contact is' : 'contacts are'} on WhoOwes`
-              : 'See who’s already on WhoOwes'
-          }
+          title={tr('friends.findFromContacts')}
+          subtitle={newContacts > 0 ? tr('home.contactsOnWhoOwes', { count: newContacts }) : tr('friends.seeWhosOn')}
           chevron
           onPress={() => navigation.navigate('FindFriends')}
         />
@@ -78,19 +83,19 @@ const FriendsScreen: React.FC = () => {
 
       {incoming.length > 0 ? (
         <>
-          <SectionHeader title="Friend requests" />
+          <SectionHeader title={tr('friends.requests')} />
           <ListCard>
             {incoming.map((r, i) => (
               <ListRow
                 key={r.id}
                 leading={<Avatar name={r.friendUser.name} uri={r.friendUser.avatarUrl} />}
                 title={r.friendUser.name}
-                subtitle="Wants to be friends"
+                subtitle={tr('friends.wantsToBeFriends')}
                 divider={i < incoming.length - 1}
                 trailing={
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <IconButton icon="close" variant="ghost" size={36} accessibilityLabel={`Decline ${r.friendUser.name}`} onPress={() => decline.mutate(r.id)} />
-                    <Button title="Accept" size="sm" onPress={() => accept.mutate(r.id)} loading={accept.isPending && accept.variables === r.id} />
+                    <IconButton icon="close" variant="ghost" size={36} accessibilityLabel={tr('friends.decline', { name: r.friendUser.name })} onPress={() => decline.mutate(r.id)} />
+                    <Button title={tr('common.accept')} size="sm" onPress={() => accept.mutate(r.id)} loading={accept.isPending && accept.variables === r.id} />
                   </View>
                 }
               />
@@ -99,31 +104,37 @@ const FriendsScreen: React.FC = () => {
         </>
       ) : null}
 
-      <SectionHeader title={friends.length ? `Your friends · ${friends.length}` : 'Your friends'} />
+      <SectionHeader title={friends.length ? `${tr('friends.yours')} · ${friends.length}` : tr('friends.yours')} />
       {friendsQ.isLoading ? (
         <SkeletonList />
       ) : list.length === 0 ? (
         <EmptyState
           emoji={search ? '🔍' : '👋'}
-          title={search ? 'No matches' : 'No friends yet'}
-          body={search ? 'Try another name.' : 'Find friends from your contacts, or add someone by phone or email.'}
-          actionLabel={search ? undefined : 'Add a friend'}
+          title={search ? tr('common.noMatches') : tr('friends.empty.title')}
+          body={search ? tr('friends.tryAnotherName') : tr('friends.empty.body')}
+          actionLabel={search ? undefined : tr('friends.addFriend')}
           onAction={() => navigation.navigate('AddFriend')}
         />
       ) : (
         <ListCard>
           {list.map((f, i) => {
-            const net = netFor(f.friendId);
-            const settled = Math.abs(net) < 0.005;
+            const amounts = amountsFor(f.friendId);
+            const direction = balanceDirection(amounts);
+            const subtitle = {
+              settled: tr('common.settledUp'),
+              owesYou: tr('balance.owesYou'),
+              youOwe: tr('balance.youOwe'),
+              mixed: tr('balance.mixed'),
+            }[direction];
             return (
               <ListRow
                 key={f.id}
                 divider={i < list.length - 1}
                 leading={<Avatar name={f.friendUser.name} uri={f.friendUser.avatarUrl} />}
                 title={f.friendUser.name}
-                subtitle={settled ? 'Settled up' : net > 0 ? 'owes you' : 'you owe'}
+                subtitle={subtitle}
                 onPress={() => navigation.navigate('FriendDetail', { friendId: f.friendId })}
-                trailing={settled ? undefined : <RowAmount amount={formatCurrency(Math.abs(net))} tone={net > 0 ? 'positive' : 'negative'} />}
+                trailing={direction === 'settled' ? undefined : <BalanceAmounts amounts={amounts} />}
               />
             );
           })}
@@ -132,14 +143,14 @@ const FriendsScreen: React.FC = () => {
 
       {outgoing.length > 0 ? (
         <>
-          <SectionHeader title="Sent requests" />
+          <SectionHeader title={tr('friends.sentRequests')} />
           <ListCard>
             {outgoing.map((r, i) => (
               <ListRow
                 key={r.id}
                 leading={<Avatar name={r.friendUser.name} />}
                 title={r.friendUser.name}
-                subtitle="Waiting for them to accept"
+                subtitle={tr('friends.waitingToAccept')}
                 divider={i < outgoing.length - 1}
               />
             ))}

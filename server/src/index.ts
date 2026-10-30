@@ -11,6 +11,7 @@ import { moneyRouter } from './routes/money.js';
 import { stripeWebhook } from './routes/webhooks.js';
 import { legalRouter } from './routes/legal.js';
 import { revenueCatWebhook } from './revenuecat.js';
+import { langOf, translate } from './i18n.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -22,9 +23,25 @@ app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWe
 // allowing any origin doesn't expose sessions. Native apps don't use CORS at all.
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept-Language');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
+
+// Error messages go out in the user's language (Accept-Language). Routes write
+// English; any JSON error body's message is translated here, with {placeholders}
+// filled from an optional `params` field (which isn't sent on).
+app.use((req, res, next) => {
+  const lang = langOf(req);
+  const json = res.json.bind(res);
+  res.json = (body: unknown) => {
+    if (res.statusCode >= 400 && body && typeof body === 'object' && typeof (body as { message?: unknown }).message === 'string') {
+      const { params, ...rest } = body as { message: string; params?: Record<string, string | number> };
+      return json({ ...rest, message: translate(rest.message, lang, params) });
+    }
+    return json(body);
+  };
   next();
 });
 
@@ -84,14 +101,14 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     console.error('[ai] upstream error', err.status, err.message);
     return res.status(502).json({ message: 'The AI service had a problem. Please try again.', code: 'ai_upstream' });
   }
-  const e = err as { status?: number; statusCode?: number; code?: string; message?: string; type?: string };
+  const e = err as { status?: number; statusCode?: number; code?: string; message?: string; type?: string; params?: Record<string, string | number> };
   if (e?.type?.startsWith?.('Stripe')) {
     console.error('[stripe]', e.message);
     return res.status(502).json({ message: 'Payment provider error. Please try again.', code: 'billing_upstream' });
   }
   const status = e?.status ?? e?.statusCode ?? 500;
   if (status >= 500) console.error(err);
-  res.status(status).json({ message: status >= 500 && !e?.code ? 'Something went wrong.' : e?.message, code: e?.code });
+  res.status(status).json({ message: status >= 500 && !e?.code ? 'Something went wrong.' : e?.message, code: e?.code, params: e?.params });
 });
 
 await initDb();

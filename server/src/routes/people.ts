@@ -2,7 +2,7 @@
  * People: my profile, finding users, friendships, reminders and contact matching.
  *
  *   GET    /me                          my profile
- *   PATCH  /me                          { name?, email?, avatarUrl? }
+ *   PATCH  /me                          { name?, email?, avatarUrl?, currency? }
  *   DELETE /me                          delete my account (required by the app stores)
  *   GET    /users/search?q=             exact phone/email, or names of people I share a group with
  *   GET    /friends                     accepted friends
@@ -11,7 +11,7 @@
  *   POST   /friends/requests/:id/accept
  *   POST   /friends/requests/:id/decline   (addressee declines, or requester cancels)
  *   DELETE /friends/:userId
- *   POST   /friends/:userId/remind      { amount? }  → shows up in their "Needs your attention"
+ *   POST   /friends/:userId/remind      { amount?, currency? }  → shows up in their "Needs your attention"
  *   GET    /reminders                   reminders sent to me in the last 14 days
  *   POST   /reminders/:id/dismiss
  *   POST   /contacts/match              { hashes: sha256(E.164)[] } → which contacts are on WhoOwes
@@ -39,6 +39,7 @@ import {
   usersById,
 } from '../domain/common.js';
 import { limited } from './phone.js';
+import { currencyCode } from '../currency.js';
 
 export const peopleRouter = Router();
 peopleRouter.use(requireUser);
@@ -81,10 +82,12 @@ peopleRouter.patch(
         name: z.string().trim().min(1).max(80).optional(),
         email: z.union([z.literal(''), z.string().trim().email().max(200)]).optional(),
         avatarUrl: z.string().url().max(500).optional(),
+        currency: currencyCode.optional(),
       })
       .parse(req.body);
     const set: Partial<UserDoc> = { updatedAt: new Date() };
     if (body.name !== undefined) set.name = body.name;
+    if (body.currency !== undefined) set.currency = body.currency;
     if (body.avatarUrl !== undefined) set.avatarUrl = body.avatarUrl;
     if (body.email !== undefined) {
       set.email = body.email || null; // '' clears it
@@ -190,7 +193,7 @@ peopleRouter.post(
       const v = body.emailOrPhone;
       const found = await db.users.findOne(v.includes('@') ? { emailLower: v.toLowerCase() } : { phone: v }, { projection: { _id: 1 } });
       targetId = found?._id;
-      if (!targetId) fail(404, `No WhoOwes account for ${v}. Send them an invite instead.`, 'not_found');
+      if (!targetId) fail(404, 'No WhoOwes account for {who}. Send them an invite instead.', 'not_found', { who: v });
     }
     if (!targetId) fail(400, 'Who do you want to add?');
     if (targetId === me) fail(400, "That's you!");
@@ -261,7 +264,9 @@ peopleRouter.post(
   route(async (req, res) => {
     const me = req.user!.id;
     const to = String(req.params.userId);
-    const { amount } = z.object({ amount: z.number().positive().optional() }).parse(req.body ?? {});
+    const { amount, currency } = z
+      .object({ amount: z.number().positive().optional(), currency: currencyCode.optional() })
+      .parse(req.body ?? {});
     if (!(await canTransactWith(me, to)) || to === me) fail(403, 'You can only remind friends or people in your groups.');
     const recent = await db.reminders.findOne({ fromUserId: me, toUserId: to, createdAt: { $gt: new Date(Date.now() - 12 * HOUR) } });
     if (recent) fail(429, 'You already sent a reminder today. Give them a little time.', 'rate_limited');
@@ -270,6 +275,7 @@ peopleRouter.post(
       fromUserId: me,
       toUserId: to,
       amountCents: amount ? toCents(amount) : null,
+      currency: amount ? (currency ?? null) : null,
       createdAt: new Date(),
       dismissedAt: null,
     });
@@ -295,6 +301,7 @@ peopleRouter.get(
         id: r._id,
         fromUser: users.get(r.fromUserId),
         amount: r.amountCents == null ? undefined : toAmount(r.amountCents),
+        currency: r.currency ?? undefined,
         createdAt: iso(r.createdAt),
       })),
     );

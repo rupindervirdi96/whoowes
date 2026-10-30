@@ -2,7 +2,7 @@
  * Mock Groups Service.
  */
 
-import { Group, GroupMember, CreateGroupPayload } from '../../types';
+import { Group, GroupMember, CreateGroupPayload, UpdateGroupPayload } from '../../types';
 import { generateId } from '../../utils/idGenerator';
 import { nowISO } from '../../utils/date';
 import { mockDelay } from './mockHelpers';
@@ -39,6 +39,7 @@ const GroupService = {
       name: payload.name,
       description: payload.description,
       members,
+      currency: payload.currency,
       createdBy: userId,
       createdAt: nowISO(),
       updatedAt: nowISO(),
@@ -46,6 +47,14 @@ const GroupService = {
     };
     db.groups.push(group);
     return group;
+  },
+
+  async updateGroup(groupId: string, payload: UpdateGroupPayload): Promise<Group> {
+    await mockDelay(300);
+    const idx = db.groups.findIndex((g) => g.id === groupId);
+    if (idx === -1) return notFound();
+    db.groups[idx] = { ...db.groups[idx], ...payload, updatedAt: nowISO() };
+    return withTotals(db.groups[idx]);
   },
 
   async addMember(groupId: string, newUserId: string): Promise<Group> {

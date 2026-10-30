@@ -8,6 +8,7 @@ import { useFeatureGate } from '../../hooks/useBilling';
 import { ActivityItem } from '../../types';
 import { formatMonthYear } from '../../utils/date';
 import { expensesToCsv } from '../../utils/csv';
+import { useT } from '../../i18n';
 import Screen from '../../components/ui/Screen';
 import TabHeader from '../../components/ui/TabHeader';
 import IconButton from '../../components/ui/IconButton';
@@ -24,6 +25,7 @@ type Filter = 'all' | 'expenses' | 'payments';
 
 const ActivityScreen: React.FC = () => {
   const t = useTheme();
+  const { t: tr } = useT();
   const navigation = useNavigation();
   const me = useCurrentUser()!;
   const activity = useActivity();
@@ -63,28 +65,28 @@ const ActivityScreen: React.FC = () => {
   const exportCsv = () => {
     if (!gate('csv_export')) return;
     const expenses = activity.items.flatMap((i) => (i.kind === 'expense' ? [i.expense] : []));
-    Share.share({ title: 'WhoOwes export', message: expensesToCsv(expenses, me.id) });
+    Share.share({ title: tr('activity.exportTitle'), message: expensesToCsv(expenses, me.id) });
   };
 
   return (
     <Screen edges={['top']} refreshing={activity.isRefetching} onRefresh={activity.refetch}>
       <TabHeader
-        title="Activity"
+        title={tr('tab.activity')}
         right={
           <>
-            <IconButton icon="insights" variant="soft" accessibilityLabel="Spending insights" onPress={() => navigation.navigate('Insights')} />
-            <IconButton icon="file-download" variant="soft" accessibilityLabel="Export CSV" onPress={exportCsv} />
+            <IconButton icon="insights" variant="soft" accessibilityLabel={tr('account.insights')} onPress={() => navigation.navigate('Insights')} />
+            <IconButton icon="file-download" variant="soft" accessibilityLabel={tr('activity.export')} onPress={exportCsv} />
           </>
         }
       />
-      <Input icon="search" value={search} onChangeText={setSearch} placeholder="Search" containerStyle={{ marginBottom: t.spacing.md }} />
+      <Input icon="search" value={search} onChangeText={setSearch} placeholder={tr('common.search')} containerStyle={{ marginBottom: t.spacing.md }} />
       <SegmentedControl
         value={filter}
         onChange={setFilter}
         options={[
-          { value: 'all', label: 'All' },
-          { value: 'expenses', label: 'Expenses' },
-          { value: 'payments', label: 'Payments' },
+          { value: 'all', label: tr('common.all') },
+          { value: 'expenses', label: tr('group.tab.expenses') },
+          { value: 'payments', label: tr('friend.payments') },
         ]}
       />
 
@@ -93,7 +95,7 @@ const ActivityScreen: React.FC = () => {
           <SkeletonList rows={6} />
         </View>
       ) : sections.length === 0 ? (
-        <EmptyState emoji="🗂️" title="Nothing to show" body={search ? `No results for “${search}”.` : 'Your expenses and payments will appear here.'} />
+        <EmptyState emoji="🗂️" title={tr('activity.empty.title')} body={search ? tr('activity.noResults', { query: search }) : tr('activity.empty.body')} />
       ) : (
         sections.map((section) => (
           <View key={section.title} style={{ marginTop: t.spacing.xl }}>

@@ -3,6 +3,7 @@ import { Pressable, TextInput, TextInputProps, View, StyleProp, ViewStyle, type 
 import { useTheme } from '../../theme';
 import Text from './Text';
 import Icon from './Icon';
+import { translate } from '../../i18n';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -74,7 +75,7 @@ const Input = forwardRef<TextInputInstance, InputProps>(
             <Pressable
               onPress={() => setHidden((h) => !h)}
               hitSlop={10}
-              accessibilityLabel={hidden ? 'Show password' : 'Hide password'}
+              accessibilityLabel={translate(hidden ? 'input.showPassword' : 'input.hidePassword')}
             >
               <Icon name={hidden ? 'visibility-off' : 'visibility'} size={20} color={t.colors.textTertiary} />
             </Pressable>

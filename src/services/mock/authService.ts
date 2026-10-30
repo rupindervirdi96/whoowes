@@ -51,7 +51,7 @@ const AuthService = {
 
   async updateProfile(
     current: User,
-    update: Partial<Pick<User, 'name' | 'phone' | 'avatarUrl' | 'email'>>,
+    update: Partial<Pick<User, 'name' | 'phone' | 'avatarUrl' | 'email' | 'currency'>>,
   ): Promise<User> {
     await mockDelay(500);
     const user: User = { ...current, ...update, updatedAt: nowISO() };

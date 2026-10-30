@@ -11,6 +11,8 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import IconButton from '../../components/ui/IconButton';
 import Icon from '../../components/ui/Icon';
+import { useT } from '../../i18n';
+import { deviceCurrency } from '../../utils/currency';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'PhoneVerify'>;
 
@@ -20,6 +22,7 @@ const RESEND_AFTER = 30;
 /** Step 2 of phone sign-in: type the texted code (and your name, if you're new). */
 const PhoneVerifyScreen: React.FC<Props> = ({ navigation, route }) => {
   const t = useTheme();
+  const { t: tr, tRich } = useT();
   const { phone, isNewUser } = route.params;
   const [devCode, setDevCode] = useState(route.params.devCode);
   const [code, setCode] = useState('');
@@ -39,20 +42,21 @@ const PhoneVerifyScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const submit = (value = code) => {
     if (value.length < CODE_LENGTH) {
-      setError('Enter the 6-digit code');
+      setError(tr('verify.enterCode'));
       return;
     }
     if (isNewUser && !name.trim()) {
-      setNameError('Tell us your name');
+      setNameError(tr('verify.tellName'));
       return;
     }
     setError(undefined);
     verify.mutate(
-      { phone, code: value, name: isNewUser ? name.trim() : undefined },
+      // New accounts start with the currency of the phone's region; changeable in Account.
+      { phone, code: value, name: isNewUser ? name.trim() : undefined, currency: isNewUser ? deviceCurrency() : undefined },
       {
         onError: (e: { message?: string; code?: string }) => {
           if (e.code === 'name_required') setNameError(e.message);
-          else setError(e.message ?? "That code didn't work. Try again.");
+          else setError(e.message ?? tr('verify.codeFailed'));
           setCode('');
           codeRef.current?.focus();
         },
@@ -72,24 +76,26 @@ const PhoneVerifyScreen: React.FC<Props> = ({ navigation, route }) => {
     <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.background }} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ flexGrow: 1, padding: t.spacing.gutter }} keyboardShouldPersistTaps="handled">
-          <IconButton icon="arrow-back" variant="ghost" accessibilityLabel="Back" onPress={() => navigation.goBack()} style={{ marginLeft: -10 }} />
+          <IconButton icon="arrow-back" variant="ghost" accessibilityLabel={tr('common.back')} onPress={() => navigation.goBack()} style={{ marginLeft: -10 }} />
 
           <Text variant="h1" style={{ marginTop: t.spacing.lg }}>
-            {isNewUser ? 'Create your account' : 'Welcome back'}
+            {isNewUser ? tr('verify.create') : tr('verify.welcomeBack')}
           </Text>
           <Text tone="secondary" style={{ marginTop: t.spacing.sm }}>
-            Enter the code we texted to{' '}
-            <Text weight="semibold" tone="default">
-              {formatPhone(phone)}
-            </Text>
-            .{' '}
+            {tRich('verify.enterCodeSent', {
+              phone: (
+                <Text key="phone" weight="semibold" tone="default">
+                  {formatPhone(phone)}
+                </Text>
+              ),
+            })}{' '}
             <Text weight="semibold" tone="primary" onPress={() => navigation.goBack()} accessibilityRole="link">
-              Change
+              {tr('common.change')}
             </Text>
           </Text>
 
           {/* One hidden input drives six boxes, so paste and SMS autofill just work. */}
-          <Pressable onPress={() => codeRef.current?.focus()} style={{ marginTop: t.spacing['2xl'] }} accessibilityLabel="Verification code">
+          <Pressable onPress={() => codeRef.current?.focus()} style={{ marginTop: t.spacing['2xl'] }} accessibilityLabel={tr('verify.codeLabel')}>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {Array.from({ length: CODE_LENGTH }, (_, i) => {
                 const active = i === code.length;
@@ -147,23 +153,23 @@ const PhoneVerifyScreen: React.FC<Props> = ({ navigation, route }) => {
             >
               <Icon name="info-outline" size={18} color={t.colors.textSecondary} />
               <Text variant="caption" tone="secondary" style={{ flex: 1 }}>
-                Test mode: no text is sent. Your code is {devCode}.
+                {tr('verify.testMode', { code: devCode })}
               </Text>
               <Text variant="label" tone="primary" onPress={() => onCode(devCode)} accessibilityRole="button">
-                Fill in
+                {tr('verify.fillIn')}
               </Text>
             </View>
           ) : null}
 
           {isNewUser ? (
             <Input
-              label="Your name"
+              label={tr('verify.yourName')}
               value={name}
               onChangeText={(v) => {
                 setName(v);
                 if (nameError) setNameError(undefined);
               }}
-              placeholder="First and last name"
+              placeholder={tr('verify.namePlaceholder')}
               autoCapitalize="words"
               textContentType="name"
               autoComplete="name"
@@ -175,14 +181,14 @@ const PhoneVerifyScreen: React.FC<Props> = ({ navigation, route }) => {
 
           <View style={{ flex: 1, minHeight: t.spacing.xl }} />
           <Button
-            title={isNewUser ? 'Create account' : 'Continue'}
+            title={isNewUser ? tr('verify.createButton') : tr('common.continue')}
             size="lg"
             fullWidth
             loading={verify.isPending}
             onPress={() => submit()}
           />
           <Button
-            title={wait > 0 ? `Resend code in ${wait}s` : 'Resend code'}
+            title={wait > 0 ? tr('verify.resendIn', { seconds: wait }) : tr('verify.resend')}
             variant="ghost"
             disabled={wait > 0}
             loading={resend.isPending}

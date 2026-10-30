@@ -10,7 +10,8 @@ import { useScanReceipt } from '../../hooks/useReceipts';
 import { useEntitlements } from '../../hooks/useBilling';
 import { useShowToast } from '../../store/uiStore';
 import { MAX_FILE_SIZE_BYTES } from '../../constants';
-import { PLANS } from '../../billing/plans';
+import { planName } from '../../billing/plans';
+import { useT, type TKey } from '../../i18n';
 import { USE_MOCK_API } from '../../config';
 import { prepareReceiptImage, stripDataUrl } from '../../utils/receiptImage';
 import Screen from '../../components/ui/Screen';
@@ -30,10 +31,11 @@ interface Picked {
   height?: number;
 }
 
-const STEPS = ['Reading the receipt…', 'Finding line items…', 'Checking the totals…'];
+const STEPS: TKey[] = ['scan.step1', 'scan.step2', 'scan.step3'];
 
 const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, navigation }) => {
   const t = useTheme();
+  const { t: tr } = useT();
   const groupId = route.params?.groupId;
   const showToast = useShowToast();
   const scan = useScanReceipt();
@@ -61,7 +63,7 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
   // Photos are shrunk before upload, so only PDFs have a hard size limit.
   const tooBig = (size?: number | null) => {
     if (size && size > MAX_FILE_SIZE_BYTES) {
-      showToast('That PDF is over 10 MB. Try a smaller file.', 'warning');
+      showToast(tr('scan.pdfTooBig'), 'warning');
       return true;
     }
     return false;
@@ -71,7 +73,7 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
     // The system photo picker needs no permission (and the app doesn't request
     // photo-library access, which Google Play restricts); only the camera does.
     if (source === 'camera' && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
-      showToast('Allow camera access in Settings to scan receipts.', 'warning');
+      showToast(tr('scan.allowCamera'), 'warning');
       return;
     }
     // Full quality here; the photo is resized and compressed just before upload.
@@ -113,7 +115,7 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
         file = { base64: stripDataUrl(await new File(picked.uri).base64()), mimeType: picked.mimeType };
       }
     } catch {
-      showToast("Couldn't open that file. Try another one.", 'error');
+      showToast(tr('scan.couldNotOpen'), 'error');
       return;
     } finally {
       setPreparing(false);
@@ -138,10 +140,10 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
       footer={
         picked ? (
           outOfScans ? (
-            <Button title="Get more scans" variant="pro" size="lg" fullWidth onPress={() => navigation.navigate('Plans', { feature: 'receipt_scan' })} />
+            <Button title={tr('scan.getMore')} variant="pro" size="lg" fullWidth onPress={() => navigation.navigate('Plans', { feature: 'receipt_scan' })} />
           ) : (
             <Button
-              title={preparing ? 'Preparing photo…' : scan.isPending ? STEPS[step] : 'Read receipt'}
+              title={preparing ? tr('scan.preparing') : scan.isPending ? tr(STEPS[step]) : tr('scan.read')}
               icon="auto-awesome"
               size="lg"
               fullWidth
@@ -156,7 +158,7 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
         <Card variant="alt" padding={14} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: t.spacing.base }}>
           <Icon name="info-outline" size={18} color={t.colors.textSecondary} />
           <Text variant="caption" tone="secondary" style={{ flex: 1 }}>
-            Demo mode: the AI isn’t connected, so you’ll get a sample receipt instead of yours.
+            {tr('scan.demo')}
           </Text>
         </Card>
       ) : null}
@@ -167,11 +169,11 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
             <Icon name="document-scanner" size={20} color={outOfScans ? t.colors.negative : t.colors.primary} />
             <Text variant="label" style={{ flex: 1 }} tone={outOfScans ? 'negative' : 'default'}>
               {outOfScans
-                ? `You've used all ${limit} scans on ${PLANS[plan].name} this month`
-                : `${scansLeft} of ${limit} AI scans left this month`}
+                ? tr('scan.usedAll', { limit, plan: planName(plan) })
+                : tr('scan.left', { left: scansLeft, limit })}
             </Text>
             <Text variant="label" tone="primary">
-              {plan === 'free' ? 'Upgrade' : 'Go unlimited'}
+              {plan === 'free' ? tr('scan.upgrade') : tr('scan.goUnlimited')}
             </Text>
           </Card>
         </Pressable>
@@ -196,16 +198,16 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
               <Icon name="receipt-long" size={56} color={t.colors.primary} />
             </View>
             <Text variant="h2" align="center" style={{ marginTop: t.spacing.lg }}>
-              Snap it, we’ll split it
+              {tr('scan.title')}
             </Text>
             <Text tone="secondary" align="center" style={{ marginTop: 6, maxWidth: 300 }}>
-              AI reads every line item, tax and tip. You just tap who had what.
+              {tr('scan.subtitle')}
             </Text>
           </View>
           <View style={{ gap: 10 }}>
-            <SourceButton icon="photo-camera" title="Take a photo" body="Best results: flat, well lit, whole receipt" onPress={() => fromImagePicker('camera')} />
-            <SourceButton icon="photo-library" title="Choose from photos" onPress={() => fromImagePicker('gallery')} />
-            <SourceButton icon="picture-as-pdf" title="Upload a PDF or file" body="E-receipts and invoices" onPress={fromFiles} />
+            <SourceButton icon="photo-camera" title={tr('scan.camera')} body={tr('scan.cameraHint')} onPress={() => fromImagePicker('camera')} />
+            <SourceButton icon="photo-library" title={tr('scan.photos')} onPress={() => fromImagePicker('gallery')} />
+            <SourceButton icon="picture-as-pdf" title={tr('scan.file')} body={tr('scan.fileHint')} onPress={fromFiles} />
           </View>
         </>
       ) : (
@@ -213,7 +215,7 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
           <Card padding={0} style={{ overflow: 'hidden' }}>
             {picked.mimeType.startsWith('image') ? (
               <View>
-                <Image source={{ uri: picked.uri }} style={{ width: '100%', height: 320 }} resizeMode="cover" accessibilityLabel="Receipt preview" />
+                <Image source={{ uri: picked.uri }} style={{ width: '100%', height: 320 }} resizeMode="cover" accessibilityLabel={tr('scan.preview')} />
                 {scan.isPending ? (
                   <Animated.View
                     pointerEvents="none"
@@ -241,18 +243,18 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
             )}
           </Card>
           {!scan.isPending ? (
-            <Button title="Choose a different file" variant="ghost" icon="refresh" onPress={() => setPicked(null)} style={{ marginTop: 6 }} />
+            <Button title={tr('scan.different')} variant="ghost" icon="refresh" onPress={() => setPicked(null)} style={{ marginTop: 6 }} />
           ) : null}
 
           <Input
-            label="Anything the AI should know? (optional)"
+            label={tr('scan.notesLabel')}
             value={instructions}
             onChangeText={setInstructions}
-            placeholder="e.g. Ignore the service charge, it's in euros"
+            placeholder={tr('scan.notesPlaceholder')}
             containerStyle={{ marginTop: t.spacing.base }}
             editable={!scan.isPending}
           />
-          <Badge label="Your receipt is only used to read the items" icon="lock-outline" tone="neutral" />
+          <Badge label={tr('scan.privacy')} icon="lock-outline" tone="neutral" />
         </>
       )}
     </Screen>

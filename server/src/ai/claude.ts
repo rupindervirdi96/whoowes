@@ -10,6 +10,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
+import { LANGUAGE_NAMES, type Lang } from '../i18n.js';
 
 const MODEL = 'claude-opus-5-5';
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
@@ -79,7 +80,7 @@ const ReceiptSchema = z.object({
   notes: z.string().nullable().describe('One short sentence about anything unclear (e.g. smudged price), else null'),
 });
 
-export async function parseReceipt(file: { data: string; mediaType: string }, instructions?: string) {
+export async function parseReceipt(file: { data: string; mediaType: string }, instructions?: string, language: Lang = 'en') {
   const source =
     file.mediaType === 'application/pdf'
       ? ({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file.data } } as const)
@@ -98,6 +99,8 @@ export async function parseReceipt(file: { data: string; mediaType: string }, in
       '- Discounts and comps are negative items. Do not include subtotal/tax/tip/total as items.',
       '- If the document is not a receipt or invoice, return merchant "Unknown", no items, all amounts 0, and explain in notes.',
       '- Never invent items or prices you cannot read; mention uncertainty in notes.',
+      '- Keep item names in the language printed on the receipt.',
+      `- Write notes in ${LANGUAGE_NAMES[language]}.`,
     ].join('\n'),
     content: [
       source,
@@ -148,6 +151,7 @@ export interface QuickAddInput {
   groups: Array<{ id: string; name: string; memberIds: string[] }>;
   currency: string;
   today: string;
+  language?: Lang;
 }
 
 export async function quickAdd(input: QuickAddInput) {
@@ -169,6 +173,8 @@ export async function quickAdd(input: QuickAddInput) {
       '- If a group is named, use its id and, unless people are listed, all its members.',
       '- Use splitType "custom" only when individual amounts are stated; then customAmounts must sum to amount.',
       '- Resolve relative dates ("yesterday", "last Friday") against `today`.',
+      '- If no currency is named or shown by a symbol, use defaultCurrency.',
+      `- The text may be in any language. Write the title in the user's own words and the note in ${LANGUAGE_NAMES[input.language ?? 'en']}.`,
     ].join('\n'),
     content: [
       { type: 'text', text: `<directory>${JSON.stringify(directory)}</directory>` },
@@ -249,14 +255,15 @@ const InsightsSchema = z.object({
   tips: z.array(z.string()).describe('1-2 practical, friendly tips about splitting or settling up'),
 });
 
-export async function monthlyInsights(stats: unknown) {
+export async function monthlyInsights(stats: { currency: string }, language: Lang = 'en') {
   return structured({
     schema: InsightsSchema,
     effort: 'low',
     system: [
       'You write a short monthly spending read-out for a WhoOwes user (a bill-splitting app).',
       'Amounts are the USER\'S SHARE of shared expenses. Be specific, warm and concise; no judgement about spending.',
-      'Only state facts present in the data. Use $ amounts rounded to whole dollars.',
+      `Only state facts present in the data. Amounts are in ${stats.currency}; write them with that currency's symbol or code, rounded to whole units.`,
+      `Write everything in ${LANGUAGE_NAMES[language]}.`,
     ].join('\n'),
     content: [{ type: 'text', text: `<month_stats>${JSON.stringify(stats)}</month_stats>` }],
   });

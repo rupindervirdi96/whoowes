@@ -107,7 +107,7 @@ const FriendService = {
   },
 
   /** Sends a payment reminder. Real backend: push notification + email. */
-  async remind(_friendUserId: string, _amount?: number): Promise<void> {
+  async remind(_friendUserId: string, _amount?: number, _currency?: string): Promise<void> {
     await mockDelay(500);
   },
 };

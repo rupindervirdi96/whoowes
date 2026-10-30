@@ -9,7 +9,9 @@ import { useShowModal } from '../../store/uiStore';
 import { formatCurrency } from '../../utils/currency';
 import { formatFullDate } from '../../utils/date';
 import { expenseForMe, firstName } from '../../utils/money';
-import { CATEGORY_BY_ID, SPLIT_TYPES } from '../../constants';
+import { categoryLabel } from '../../constants';
+import { getSplitTypeLabel } from '../../utils/splitEngine';
+import { useT } from '../../i18n';
 import Screen from '../../components/ui/Screen';
 import Text from '../../components/ui/Text';
 import Card from '../../components/ui/Card';
@@ -25,6 +27,7 @@ import EmptyState from '../../components/ui/EmptyState';
 const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route, navigation }) => {
   const { expenseId } = route.params;
   const t = useTheme();
+  const { t: tr } = useT();
   const me = useCurrentUser()!;
   const { data: expense, isLoading, isError } = useExpense(expenseId);
   const { data: groups = [] } = useGroups();
@@ -42,12 +45,12 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
             icon="delete-outline"
             variant="ghost"
             size={40}
-            accessibilityLabel="Delete expense"
+            accessibilityLabel={tr('expenseDetail.delete')}
             onPress={() =>
               showModal({
-                title: 'Delete this expense?',
-                body: 'Balances for everyone on it will update. This can’t be undone.',
-                confirmLabel: 'Delete',
+                title: tr('expenseDetail.deleteTitle'),
+                body: tr('expenseDetail.deleteBody'),
+                confirmLabel: tr('common.delete'),
                 variant: 'danger',
                 onConfirm: () => del.mutate(expenseId, { onSuccess: () => navigation.goBack() }),
               })
@@ -55,7 +58,7 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
           />
         ) : null,
     });
-  }, [navigation, canDelete, expenseId, del, showModal]);
+  }, [navigation, canDelete, expenseId, del, showModal, tr]);
 
   if (isLoading) {
     return (
@@ -67,7 +70,7 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
   if (isError || !expense) {
     return (
       <Screen>
-        <EmptyState emoji="🫥" title="Expense not found" body="It may have been deleted." actionLabel="Go back" onAction={() => navigation.goBack()} />
+        <EmptyState emoji="🫥" title={tr('expenseDetail.notFound')} body={tr('expenseDetail.maybeDeleted')} actionLabel={tr('common.goBack')} onAction={() => navigation.goBack()} />
       </Screen>
     );
   }
@@ -88,12 +91,12 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
           {formatCurrency(expense.amount, expense.currency)}
         </Text>
         <Text variant="caption" tone="tertiary" style={{ marginTop: 4 }}>
-          {iPaid ? 'You' : expense.paidByUser.name} paid · {formatFullDate(expense.date)}
+          {iPaid ? tr('expense.youPaid') : tr('expense.theyPaid', { name: expense.paidByUser.name })} · {formatFullDate(expense.date)}
         </Text>
         {position.amount > 0 ? (
           <Badge
             style={{ alignSelf: 'center', marginTop: 12 }}
-            label={`${position.label} ${formatCurrency(position.amount)}`}
+            label={`${position.label} ${formatCurrency(position.amount, expense.currency)}`}
             tone={position.tone === 'positive' ? 'positive' : position.tone === 'negative' ? 'negative' : 'neutral'}
           />
         ) : null}
@@ -102,7 +105,7 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
       {mine && !iPaid && !mine.paid ? (
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Button
-            title="I paid this back"
+            title={tr('expenseDetail.paidBack')}
             icon="check"
             variant="secondary"
             style={{ flex: 1 }}
@@ -110,15 +113,17 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
             onPress={() => markPaid.mutate({ expenseId, userId: me.id })}
           />
           <Button
-            title={`Pay ${firstName(expense.paidByUser.name)}`}
+            title={tr('expenseDetail.pay', { name: firstName(expense.paidByUser.name) })}
             icon="swap-horiz"
             style={{ flex: 1 }}
-            onPress={() => navigation.navigate('SettleUp', { userId: expense.paidBy, amount: mine.amount, groupId: expense.groupId ?? undefined })}
+            onPress={() =>
+              navigation.navigate('SettleUp', { userId: expense.paidBy, amount: mine.amount, currency: expense.currency, groupId: expense.groupId ?? undefined })
+            }
           />
         </View>
       ) : null}
 
-      <SectionHeader title={`Split ${SPLIT_TYPES.find((s) => s.id === expense.splitType)?.label.toLowerCase() ?? ''}`} />
+      <SectionHeader title={tr('expenseDetail.splitHow', { how: getSplitTypeLabel(expense.splitType).toLocaleLowerCase() })} />
       <Card padding={4} style={{ paddingHorizontal: 12 }}>
         {expense.splits.map((s, i) => {
           const isPayer = s.userId === expense.paidBy;
@@ -127,8 +132,8 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
               key={s.userId}
               divider={i < expense.splits.length - 1}
               leading={<Avatar name={s.user.name} size="sm" />}
-              title={s.userId === me.id ? 'You' : s.user.name}
-              subtitle={isPayer ? 'paid the bill' : s.paid ? 'paid back' : 'owes'}
+              title={s.userId === me.id ? tr('common.you') : s.user.name}
+              subtitle={isPayer ? tr('expenseDetail.paidTheBill') : s.paid ? tr('expenseDetail.paidBackShort') : tr('balance.owes')}
               trailing={
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text variant="bodyStrong" tabular tone={isPayer || s.paid ? 'tertiary' : 'default'}>
@@ -148,7 +153,7 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
 
       {expense.items && expense.items.length > 0 ? (
         <>
-          <SectionHeader title="Receipt items" />
+          <SectionHeader title={tr('expenseDetail.items')} />
           <Card padding={4} style={{ paddingHorizontal: 12 }}>
             {expense.items.map((item, i) => (
               <ListRow
@@ -156,24 +161,27 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
                 divider={i < expense.items!.length - 1}
                 title={item.name}
                 subtitle={item.quantity > 1 ? `×${item.quantity}` : undefined}
-                trailing={<Text tabular>{formatCurrency(item.price * item.quantity)}</Text>}
+                trailing={<Text tabular>{formatCurrency(item.price * item.quantity, expense.currency)}</Text>}
               />
             ))}
           </Card>
         </>
       ) : null}
 
-      <SectionHeader title="Details" />
+      <SectionHeader title={tr('expenseDetail.details')} />
       <Card padding={4} style={{ paddingHorizontal: 12 }}>
-        <ListRow title="Category" trailing={<Text tone="secondary">{CATEGORY_BY_ID[expense.category].label}</Text>} divider />
+        <ListRow title={tr('expenseDetail.category')} trailing={<Text tone="secondary">{categoryLabel(expense.category)}</Text>} divider />
+        <ListRow title={tr('receipt.currency')} trailing={<Text tone="secondary">{expense.currency}</Text>} divider />
         <ListRow
-          title="Group"
-          trailing={<Text tone={group ? 'primary' : 'secondary'}>{group?.name ?? 'None'}</Text>}
+          title={tr('expense.group')}
+          trailing={<Text tone={group ? 'primary' : 'secondary'}>{group?.name ?? tr('expenseDetail.none')}</Text>}
           onPress={group ? () => navigation.navigate('GroupDetail', { groupId: group.id }) : undefined}
           divider={!!expense.description || !!expense.receiptId}
         />
-        {expense.receiptId ? <ListRow title="Receipt" trailing={<Badge label="Scanned with AI" tone="primary" icon="auto-awesome" />} divider={!!expense.description} /> : null}
-        {expense.description ? <ListRow title="Notes" subtitle={expense.description} /> : null}
+        {expense.receiptId ? (
+          <ListRow title={tr('expenseDetail.receipt')} trailing={<Badge label={tr('expenseDetail.scannedWithAI')} tone="primary" icon="auto-awesome" />} divider={!!expense.description} />
+        ) : null}
+        {expense.description ? <ListRow title={tr('expenseDetail.notes')} subtitle={expense.description} /> : null}
       </Card>
     </Screen>
   );

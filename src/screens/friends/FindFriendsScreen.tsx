@@ -16,19 +16,23 @@ import Card, { ListCard } from '../../components/ui/Card';
 import ListRow, { SectionHeader } from '../../components/ui/ListRow';
 import { SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
+import { translate, useT } from '../../i18n';
+import { INVITE_URL } from '../../config';
 
-const INVITE_MESSAGE = 'I’m using WhoOwes to split bills — join me so we can settle up without the awkward math 🦉 https://whoowes.app';
+const inviteMessage = () => translate('invite.message', { url: INVITE_URL });
 const INVITE_PAGE = 25;
 
 function invite(phone: string) {
-  if (Platform.OS === 'web') return Share.share({ message: INVITE_MESSAGE });
+  const message = inviteMessage();
+  if (Platform.OS === 'web') return Share.share({ message });
   // iOS uses "&" before body, Android "?".
-  const url = `sms:${phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(INVITE_MESSAGE)}`;
-  return Linking.openURL(url).catch(() => Share.share({ message: INVITE_MESSAGE }));
+  const url = `sms:${phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(message)}`;
+  return Linking.openURL(url).catch(() => Share.share({ message }));
 }
 
 const FindFriendsScreen: React.FC<RootScreenProps<'FindFriends'>> = () => {
   const t = useTheme();
+  const { t: tr } = useT();
   const matches = useContactMatches();
   const requestAccess = useRequestContactsAccess();
   const add = useAddFriend();
@@ -57,7 +61,7 @@ const FindFriendsScreen: React.FC<RootScreenProps<'FindFriends'>> = () => {
       <Screen
         footer={
           <Button
-            title={blocked ? 'Open Settings' : 'Allow access to contacts'}
+            title={blocked ? tr('contacts.openSettings') : tr('contacts.allow')}
             size="lg"
             fullWidth
             loading={requestAccess.isPending}
@@ -72,20 +76,20 @@ const FindFriendsScreen: React.FC<RootScreenProps<'FindFriends'>> = () => {
             <Icon name="contacts" size={40} color={t.colors.primary} />
           </View>
           <Text variant="h2" align="center" style={{ marginTop: t.spacing.xl }}>
-            See who’s already on WhoOwes
+            {tr('friends.seeWhosOn')}
           </Text>
           <Text tone="secondary" align="center" style={{ marginTop: t.spacing.sm, maxWidth: 320 }}>
-            We’ll check your contacts and show you who you can add, so you don’t have to search one by one.
+            {tr('contacts.intro')}
           </Text>
         </View>
         <View style={{ gap: t.spacing.base, marginTop: t.spacing['3xl'] }}>
-          <PrivacyPoint icon="lock-outline" text="Numbers are scrambled (hashed) on your phone before they’re checked." />
-          <PrivacyPoint icon="cloud-off" text="Your address book is never uploaded or stored." />
-          <PrivacyPoint icon="notifications-off" text="We never message your contacts. Invites only go out if you send them." />
+          <PrivacyPoint icon="lock-outline" text={tr('contacts.privacy1')} />
+          <PrivacyPoint icon="cloud-off" text={tr('contacts.privacy2')} />
+          <PrivacyPoint icon="notifications-off" text={tr('contacts.privacy3')} />
         </View>
         {blocked ? (
           <Text variant="caption" tone="tertiary" align="center" style={{ marginTop: t.spacing.xl }}>
-            Contacts access is turned off for WhoOwes. You can turn it on in Settings.
+            {tr('contacts.blocked')}
           </Text>
         ) : null}
       </Screen>
@@ -95,7 +99,7 @@ const FindFriendsScreen: React.FC<RootScreenProps<'FindFriends'>> = () => {
   if (data.permission === 'unavailable') {
     return (
       <Screen>
-        <EmptyState emoji="📱" title="Use the mobile app for this" body="Finding friends from your contacts works in the WhoOwes app on your phone." />
+        <EmptyState emoji="📱" title={tr('contacts.unavailable.title')} body={tr('contacts.unavailable.body')} />
       </Screen>
     );
   }
@@ -106,24 +110,24 @@ const FindFriendsScreen: React.FC<RootScreenProps<'FindFriends'>> = () => {
   return (
     <Screen refreshing={matches.isRefetching} onRefresh={matches.refetch}>
       {total > 8 ? (
-        <Input icon="search" value={search} onChangeText={setSearch} placeholder="Search contacts" autoCorrect={false} />
+        <Input icon="search" value={search} onChangeText={setSearch} placeholder={tr('contacts.search')} autoCorrect={false} />
       ) : null}
 
-      <SectionHeader title={`On WhoOwes${members.length ? ` · ${members.length}` : ''}`} style={{ marginTop: total > 8 ? t.spacing.xl : 0 }} />
+      <SectionHeader title={`${tr('contacts.onWhoOwes')}${members.length ? ` · ${members.length}` : ''}`} style={{ marginTop: total > 8 ? t.spacing.xl : 0 }} />
       {members.length === 0 ? (
         <Card variant="alt">
-          <Text tone="secondary">{q ? 'No matches.' : 'None of your contacts are on WhoOwes yet. Invite a few below.'}</Text>
+          <Text tone="secondary">{q ? tr('common.noMatches') : tr('contacts.noneYet')}</Text>
         </Card>
       ) : (
         <ListCard>
           {members.map((m, i) => {
             const subtitle =
               m.state === 'friend'
-                ? 'Already friends'
+                ? tr('contacts.alreadyFriends')
                 : m.state === 'requested'
-                  ? 'Request sent'
+                  ? tr('contacts.requestSent')
                   : m.state === 'incoming'
-                    ? 'Wants to be friends'
+                    ? tr('friends.wantsToBeFriends')
                     : formatPhone(m.phone);
             return (
               <ListRow
@@ -135,7 +139,7 @@ const FindFriendsScreen: React.FC<RootScreenProps<'FindFriends'>> = () => {
                 trailing={
                   m.state === 'none' ? (
                     <Button
-                      title="Add"
+                      title={tr('common.add')}
                       size="sm"
                       icon="person-add-alt"
                       loading={add.isPending && (add.variables?.userId === m.user?.id || add.variables?.emailOrPhone === m.phone)}
@@ -143,7 +147,7 @@ const FindFriendsScreen: React.FC<RootScreenProps<'FindFriends'>> = () => {
                     />
                   ) : m.state === 'incoming' && m.requestId ? (
                     <Button
-                      title="Accept"
+                      title={tr('common.accept')}
                       size="sm"
                       loading={accept.isPending && accept.variables === m.requestId}
                       onPress={() => accept.mutate(m.requestId!)}
@@ -162,7 +166,7 @@ const FindFriendsScreen: React.FC<RootScreenProps<'FindFriends'>> = () => {
 
       {invites.length > 0 ? (
         <>
-          <SectionHeader title={`Invite to WhoOwes · ${invites.length}`} />
+          <SectionHeader title={`${tr('contacts.invite')} · ${invites.length}`} />
           <ListCard>
             {shownInvites.map((c, i) => (
               <ListRow
@@ -171,13 +175,13 @@ const FindFriendsScreen: React.FC<RootScreenProps<'FindFriends'>> = () => {
                 title={c.contactName}
                 subtitle={formatPhone(c.phone)}
                 divider={i < shownInvites.length - 1}
-                trailing={<Button title="Invite" size="sm" variant="secondary" onPress={() => invite(c.phone)} />}
+                trailing={<Button title={tr('contacts.inviteButton')} size="sm" variant="secondary" onPress={() => invite(c.phone)} />}
               />
             ))}
           </ListCard>
           {shownInvites.length < invites.length ? (
             <Button
-              title={`Show all ${invites.length}`}
+              title={tr('contacts.showAll', { count: invites.length })}
               variant="ghost"
               onPress={() => setShowAllInvites(true)}
               style={{ marginTop: t.spacing.sm }}
@@ -189,8 +193,8 @@ const FindFriendsScreen: React.FC<RootScreenProps<'FindFriends'>> = () => {
       {data.permission === 'demo' || data.demoSeeded ? (
         <Text variant="caption" tone="tertiary" align="center" style={{ marginTop: t.spacing.xl }}>
           {data.permission === 'demo'
-            ? 'Demo: these are sample contacts.'
-            : 'Demo mode: a few of your contacts are shown as members so you can try this.'}
+            ? tr('contacts.demoSample')
+            : tr('contacts.demoSeeded')}
         </Text>
       ) : null}
     </Screen>

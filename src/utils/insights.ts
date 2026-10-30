@@ -1,11 +1,14 @@
 /**
  * Month-level spending stats. Numbers are always computed here (deterministic);
  * the AI only writes the narrative on top of them.
+ *
+ * Stats cover one currency at a time; amounts in other currencies are never mixed in.
  */
 
 import type { Expense, ExpenseCategory } from '../types';
 import type { MonthStats } from '../services';
 import { roundToCents } from './currency';
+import { formatMonthYear } from './date';
 
 export function monthKey(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
@@ -19,7 +22,7 @@ export function shiftMonth(key: string, delta: number): string {
 
 export function monthLabel(key: string): string {
   const [y, m] = key.split('-').map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  return formatMonthYear(new Date(y, m - 1, 1));
 }
 
 /** "My share" of an expense — what it actually cost me. */
@@ -27,9 +30,24 @@ function myShare(e: Expense, userId: string): number {
   return e.splits.find((s) => s.userId === userId)?.amount ?? 0;
 }
 
-export function computeMonthStats(expenses: Expense[], userId: string, month: string): MonthStats {
-  const inMonth = expenses.filter((e) => monthKey(e.date) === month);
-  const prev = expenses.filter((e) => monthKey(e.date) === shiftMonth(month, -1));
+/** Currencies I spent in during a month, most spent first (preferred currency wins ties). */
+export function monthCurrencies(expenses: Expense[], userId: string, month: string, preferred?: string): string[] {
+  const totals = new Map<string, number>();
+  for (const e of expenses) {
+    if (monthKey(e.date) !== month) continue;
+    totals.set(e.currency, (totals.get(e.currency) ?? 0) + myShare(e, userId));
+  }
+  return [...totals.entries()]
+    .sort((a, b) => b[1] - a[1] || (a[0] === preferred ? -1 : b[0] === preferred ? 1 : 0))
+    .map(([c]) => c);
+}
+
+export function computeMonthStats(expenses: Expense[], userId: string, month: string, currency?: string, preferred?: string): MonthStats {
+  const available = monthCurrencies(expenses, userId, month, preferred);
+  const chosen = currency && available.includes(currency) ? currency : (available[0] ?? preferred ?? 'USD');
+  const inCurrency = expenses.filter((e) => e.currency === chosen);
+  const inMonth = inCurrency.filter((e) => monthKey(e.date) === month);
+  const prev = inCurrency.filter((e) => monthKey(e.date) === shiftMonth(month, -1));
 
   const byCat = new Map<ExpenseCategory, number>();
   const byPerson = new Map<string, { name: string; amount: number }>();
@@ -46,6 +64,8 @@ export function computeMonthStats(expenses: Expense[], userId: string, month: st
 
   return {
     month,
+    currency: chosen,
+    currencies: available,
     total: roundToCents(inMonth.reduce((sum, e) => sum + myShare(e, userId), 0)),
     previousTotal: roundToCents(prev.reduce((sum, e) => sum + myShare(e, userId), 0)),
     byCategory: Array.from(byCat.entries())

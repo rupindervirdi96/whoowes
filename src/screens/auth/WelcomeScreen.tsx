@@ -13,12 +13,15 @@ import Text from '../../components/ui/Text';
 import Button from '../../components/ui/Button';
 import PhoneInput from '../../components/PhoneInput';
 import { LogoMark } from '../../components/ui/Logo';
+import { LANGUAGES, useLanguageStore, useT } from '../../i18n';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Welcome'>;
 
 /** First screen: sign in or sign up with a phone number. */
 const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   const t = useTheme();
+  const { t: tr, tRich, lang } = useT();
+  const setLanguage = useLanguageStore((s) => s.setPreference);
   const [country, setCountry] = useState<CountryCode>(deviceCountry);
   const [digits, setDigits] = useState('');
   const [error, setError] = useState<string>();
@@ -28,7 +31,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   const submit = () => {
     const phone = toE164(digits, country);
     if (!phone) {
-      setError('Enter a valid phone number');
+      setError(tr('welcome.invalidPhone'));
       return;
     }
     setError(undefined);
@@ -51,7 +54,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
             <View style={{ alignItems: 'center', marginTop: t.spacing['2xl'], marginBottom: t.spacing['2xl'] }}>
               <LogoMark size={72} />
               <Text variant="h1" tone="hero" align="center" style={{ marginTop: t.spacing.lg }}>
-                Split it. Settle it.{'\n'}Stay friends.
+                {tr('welcome.tagline')}
               </Text>
             </View>
 
@@ -65,9 +68,9 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
                 ...(t.elevation(2) as object),
               }}
             >
-              <Text variant="h2">Get started</Text>
+              <Text variant="h2">{tr('welcome.getStarted')}</Text>
               <Text tone="secondary" style={{ marginTop: 4, marginBottom: t.spacing.xl }}>
-                Sign in or create an account with your phone number.
+                {tr('welcome.intro')}
               </Text>
               <PhoneInput
                 country={country}
@@ -80,30 +83,43 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
                 error={error}
                 onSubmitEditing={submit}
               />
-              <Button title="Continue" size="lg" fullWidth onPress={submit} loading={start.isPending} />
+              <Button title={tr('common.continue')} size="lg" fullWidth onPress={submit} loading={start.isPending} />
               <Text variant="caption" tone="tertiary" align="center" style={{ marginTop: t.spacing.md }}>
-                We’ll text you a 6-digit code. Message and data rates may apply.
+                {tr('welcome.smsNote')}
               </Text>
               {!USE_MOCK_API ? (
                 <Text variant="caption" tone="tertiary" align="center" style={{ marginTop: 4 }}>
-                  By continuing you agree to the{' '}
-                  <Text variant="caption" weight="bold" tone="secondary" onPress={() => Linking.openURL(LEGAL_URLS.terms)} accessibilityRole="link">
-                    Terms
-                  </Text>{' '}
-                  and{' '}
-                  <Text variant="caption" weight="bold" tone="secondary" onPress={() => Linking.openURL(LEGAL_URLS.privacy)} accessibilityRole="link">
-                    Privacy Policy
-                  </Text>
-                  .
+                  {tRich('welcome.agree', {
+                    terms: (
+                      <Text key="terms" variant="caption" weight="bold" tone="secondary" onPress={() => Linking.openURL(LEGAL_URLS.terms)} accessibilityRole="link">
+                        {tr('plans.terms')}
+                      </Text>
+                    ),
+                    privacy: (
+                      <Text key="privacy" variant="caption" weight="bold" tone="secondary" onPress={() => Linking.openURL(LEGAL_URLS.privacy)} accessibilityRole="link">
+                        {tr('legal.privacy')}
+                      </Text>
+                    ),
+                  })}
                 </Text>
               ) : null}
             </View>
 
             <View style={{ flex: 1, minHeight: t.spacing.xl }} />
+            {/* Language switcher, before anyone has an account. */}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 16, marginBottom: t.spacing.sm }}>
+              {LANGUAGES.map((l) => (
+                <Pressable key={l.code} onPress={() => setLanguage(l.code)} hitSlop={8} accessibilityRole="button" accessibilityState={{ selected: lang === l.code }}>
+                  <Text variant="label" tone={lang === l.code ? 'primary' : 'tertiary'} weight={lang === l.code ? 'bold' : 'medium'}>
+                    {l.native}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             {USE_MOCK_API ? (
             <>
             <Button
-              title="Try the demo account"
+              title={tr('welcome.demo')}
               variant="ghost"
               icon="auto-awesome"
               loading={demo.isPending}
@@ -117,7 +133,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
               style={{ alignSelf: 'center', paddingVertical: t.spacing.sm }}
             >
               <Text variant="label" tone="secondary">
-                Use email instead
+                {tr('welcome.useEmail')}
               </Text>
             </Pressable>
             </>

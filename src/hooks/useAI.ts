@@ -10,6 +10,8 @@ import { useExpenses } from './useExpenses';
 import { useEntitlements, useHandlePaywallError } from './useBilling';
 import { computeMonthStats } from '../utils/insights';
 import type { MutationError } from './queryUtils';
+import { translate, useLanguage } from '../i18n';
+import { useMyCurrency } from './useCurrency';
 
 export function useQuickAdd() {
   const showToast = useShowToast();
@@ -17,7 +19,7 @@ export function useQuickAdd() {
   return useMutation({
     mutationFn: ({ text, ctx }: { text: string; ctx: QuickAddContext }) => AIService.quickAdd(text, ctx),
     onError: (e: MutationError) => {
-      if (!handlePaywall(e)) showToast(e.message ?? "Couldn't understand that — try rephrasing", 'error');
+      if (!handlePaywall(e)) showToast(e.message ?? translate('toast.quickAddFailed'), 'error');
     },
   });
 }
@@ -29,23 +31,28 @@ export function useAssignItems() {
     mutationFn: ({ items, people, instruction }: { items: ReceiptItem[]; people: User[]; instruction: string }) =>
       AIService.assignItems(items, people, instruction),
     onError: (e: MutationError) => {
-      if (!handlePaywall(e)) showToast(e.message ?? 'Could not assign items', 'error');
+      if (!handlePaywall(e)) showToast(e.message ?? translate('toast.couldNotAssign'), 'error');
     },
   });
 }
 
-/** Free users get the numbers; Pro users also get the AI write-up. */
-export function useMonthInsights(month: string) {
+/**
+ * Free users get the numbers; Pro users also get the AI write-up. Stats are for
+ * one currency at a time (`currency`, or the one with the most spending).
+ */
+export function useMonthInsights(month: string, currency?: string) {
   const user = useCurrentUser();
+  const preferred = useMyCurrency();
+  const language = useLanguage();
   const { data: expenses } = useExpenses();
   const { can } = useEntitlements();
   const stats = useMemo(
-    () => (expenses && user ? computeMonthStats(expenses, user.id, month) : null),
-    [expenses, user, month],
+    () => (expenses && user ? computeMonthStats(expenses, user.id, month, currency, preferred) : null),
+    [expenses, user, month, currency, preferred],
   );
   const aiEnabled = can('ai_insights');
   const narrative = useQuery({
-    queryKey: QUERY_KEYS.INSIGHTS(month),
+    queryKey: [...QUERY_KEYS.INSIGHTS(month), stats?.currency, language],
     queryFn: () => AIService.insights(stats!),
     enabled: !!stats && aiEnabled && stats.count > 0,
     staleTime: 10 * 60_000,

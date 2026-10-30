@@ -31,3 +31,9 @@ export const LEGAL_URLS = {
 
 /** Deep-link scheme registered in app.json — Stripe Checkout returns here. */
 export const APP_SCHEME = 'whoowes';
+
+/**
+ * Link in invite messages. Defaults to the Google Play listing (whoowes.app is
+ * someone else's domain). Set EXPO_PUBLIC_INVITE_URL once WhoOwes has its own site.
+ */
+export const INVITE_URL = process.env.EXPO_PUBLIC_INVITE_URL || 'https://play.google.com/store/apps/details?id=com.whoowes.app';

@@ -16,11 +16,14 @@ import IconButton from '../../components/ui/IconButton';
 import Icon from '../../components/ui/Icon';
 import Badge from '../../components/ui/Badge';
 import { LogoMark } from '../../components/ui/Logo';
+import { useT } from '../../i18n';
+import { formatCurrency } from '../../utils/currency';
 
 type PaidPlan = Exclude<PlanId, 'free'>;
 
 const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) => {
   const t = useTheme();
+  const { t: tr } = useT();
   const feature = route.params?.feature;
   const { plan: current } = useEntitlements();
   const checkout = useCheckout();
@@ -40,31 +43,36 @@ const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) 
   const chosenPkg = pkg(selected, interval);
 
   // Store builds show the store's own prices, in the user's currency.
-  const priceLabel = (id: PaidPlan) => (useStore ? pkg(id, interval)?.product.priceString ?? '—' : `$${PLANS[id].price[interval].toFixed(2)}`);
+  // Web (Stripe) prices are in US dollars.
+  const priceLabel = (id: PaidPlan) => (useStore ? pkg(id, interval)?.product.priceString ?? '—' : formatCurrency(PLANS[id].price[interval], 'USD'));
   const perMonthLabel = (id: PaidPlan) =>
-    useStore ? pkg(id, 'year')?.product.pricePerMonthString ?? null : `$${(PLANS[id].price.year / 12).toFixed(2)}`;
+    useStore ? pkg(id, 'year')?.product.pricePerMonthString ?? null : formatCurrency(PLANS[id].price.year / 12, 'USD');
   const savings = (() => {
     const m = pkg('pro', 'month')?.product.price;
     const y = pkg('pro', 'year')?.product.price;
     return useStore && m && y ? Math.round((1 - y / (m * 12)) * 100) : yearlySavingsPercent(PLANS.pro);
   })();
   const trial = useStore ? chosenPkg?.product.defaultOption?.freePhase?.billingPeriod : null;
-  const trialLabel = trial ? `${trial.value}-${trial.unit.toLowerCase()} free trial, then ` : '';
-  const per = interval === 'year' ? 'year' : 'month';
+  const trialUnit = trial ? trial.unit.toLowerCase() : '';
+  const trialLabel = trial
+    ? tr('plans.trial', { count: trial.value, unit: tr(trialUnit === 'day' ? 'plans.unit.day' : trialUnit === 'week' ? 'plans.unit.week' : 'plans.unit.month', { count: trial.value }) }) + ' '
+    : '';
+  const perLabel = tr(interval === 'year' ? 'plans.perYear' : 'plans.perMonth');
+  const storeName = StoreBilling.storeName === 'Google Play' ? tr('store.googlePlay') : tr('store.appStore');
 
-  let ctaTitle = `Get ${chosen.name} · $${perMonth.toFixed(2)}/mo`;
-  if (useStore) ctaTitle = chosenPkg ? `Subscribe · ${chosenPkg.product.priceString}/${per}` : store.isLoading ? 'Loading prices…' : 'Not available right now';
-  if (StoreBilling.unavailable) ctaTitle = 'Coming soon';
+  let ctaTitle = tr('plans.get', { plan: chosen.name, price: formatCurrency(perMonth, 'USD') });
+  if (useStore) ctaTitle = chosenPkg ? tr('plans.subscribe', { price: chosenPkg.product.priceString, per: perLabel }) : store.isLoading ? tr('plans.loading') : tr('plans.notAvailable');
+  if (StoreBilling.unavailable) ctaTitle = tr('plans.comingSoon');
   const ctaDisabled = StoreBilling.unavailable || (useStore && !chosenPkg);
 
-  let footnote = `Billed ${interval === 'year' ? 'yearly' : 'monthly'} via Stripe. Cancel anytime from Account → Manage billing.`;
-  if (BillingService.isDemo) footnote = 'Demo mode — no card needed, nothing is charged.';
+  let footnote = tr(interval === 'year' ? 'plans.footStripeYearly' : 'plans.footStripeMonthly');
+  if (BillingService.isDemo) footnote = tr('plans.footDemo');
   if (useStore) {
-    footnote = `${trialLabel}${chosenPkg?.product.priceString ?? ''} per ${per}, billed by ${StoreBilling.storeName}. Renews automatically until you cancel, anytime in ${StoreBilling.storeName} → Subscriptions.`;
+    footnote = trialLabel + tr('plans.footStore', { price: chosenPkg?.product.priceString ?? '', per: perLabel, store: storeName });
   }
-  if (StoreBilling.unavailable) footnote = "Subscriptions aren't available in this version of the app yet.";
-  const headline = feature ? FEATURE_COPY[feature].title : 'Let AI do the math';
-  const sub = feature ? FEATURE_COPY[feature].body : 'Scan receipts, add expenses by typing, and see where the money goes.';
+  if (StoreBilling.unavailable) footnote = tr('billing.unavailableInVersion');
+  const headline = feature ? tr(FEATURE_COPY[feature].titleKey) : tr('plans.headline');
+  const sub = feature ? tr(FEATURE_COPY[feature].bodyKey) : tr('plans.subhead');
 
   const buy = () =>
     checkout.mutate({ plan: selected, interval }, { onSuccess: ({ completed }) => completed && navigation.goBack() });
@@ -74,7 +82,7 @@ const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) 
       <LinearGradient colors={['#2A1D9E', '#120D3A']} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 340 }} />
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16 }}>
-          <IconButton icon="close" variant="hero" accessibilityLabel="Close" onPress={() => navigation.goBack()} />
+          <IconButton icon="close" variant="hero" accessibilityLabel={tr('common.close')} onPress={() => navigation.goBack()} />
         </View>
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}>
           <View style={{ alignItems: 'center' }}>
@@ -108,7 +116,7 @@ const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) 
                 style={{ paddingHorizontal: 18, height: 36, borderRadius: 999, justifyContent: 'center', backgroundColor: interval === iv ? '#FFFFFF' : 'transparent' }}
               >
                 <Text variant="label" color={interval === iv ? t.brand.ink : '#FFFFFF'}>
-                  {iv === 'month' ? 'Monthly' : savings > 0 ? `Yearly · save ${savings}%` : 'Yearly'}
+                  {iv === 'month' ? tr('plans.monthly') : savings > 0 ? tr('plans.yearlySave', { percent: savings }) : tr('plans.yearly')}
                 </Text>
               </Pressable>
             ))}
@@ -142,37 +150,37 @@ const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) 
                     <Text variant="h3" style={{ flex: 1 }}>
                       {p.name}
                     </Text>
-                    {p.highlight ? <Badge label="Most popular" tone="primary" /> : null}
-                    {current === id ? <Badge label="Current" tone="positive" /> : null}
+                    {p.highlight ? <Badge label={tr('plans.popular')} tone="primary" /> : null}
+                    {current === id ? <Badge label={tr('plans.current')} tone="positive" /> : null}
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 8, marginLeft: 32 }}>
                     <Text variant="h2" tabular>
                       {priceLabel(id)}
                     </Text>
-                    <Text tone="tertiary">/{per}</Text>
+                    <Text tone="tertiary">/{perLabel}</Text>
                     {interval === 'year' && perMonthLabel(id) ? (
                       <Text variant="caption" tone="positive" style={{ marginLeft: 'auto' }}>
-                        {perMonthLabel(id)}/mo
+                        {tr('plans.perMonthShort', { price: perMonthLabel(id) ?? '' })}
                       </Text>
                     ) : null}
                   </View>
                   {active ? (
                     <View style={{ marginTop: 12, marginLeft: 32, gap: 8 }}>
-                      {p.perks.map((perk) => (
+                      {p.perkKeys.map((perk) => (
                         <View key={perk} style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
                           <Icon name="check-circle" size={18} color={t.colors.positive} />
-                          <Text style={{ flex: 1 }}>{perk}</Text>
+                          <Text style={{ flex: 1 }}>{tr(perk)}</Text>
                         </View>
                       ))}
                     </View>
                   ) : (
                     <Text variant="caption" tone="tertiary" style={{ marginTop: 6, marginLeft: 32 }}>
-                      {p.tagline}
+                      {tr(p.taglineKey)}
                     </Text>
                   )}
                   {locked ? (
                     <Text variant="caption" tone="warning" style={{ marginTop: 8, marginLeft: 32 }}>
-                      {FEATURE_COPY[feature!].title} needs Pro
+                      {tr('plans.needsPro', { feature: tr(FEATURE_COPY[feature!].titleKey) })}
                     </Text>
                   ) : null}
                 </Pressable>
@@ -182,14 +190,14 @@ const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) 
 
           <View style={{ marginTop: 16, gap: 6 }}>
             <Text variant="caption" tone="tertiary" align="center">
-              Free stays free: unlimited expenses, groups and settle-ups, plus 3 AI scans a month.
+              {tr('plans.freeStaysFree')}
             </Text>
           </View>
         </ScrollView>
 
         <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, borderTopWidth: 1, borderTopColor: t.colors.border, backgroundColor: t.colors.background }}>
           {isCurrent ? (
-            <Button title="Manage subscription" variant="secondary" size="lg" fullWidth loading={manage.isPending} onPress={() => manage.mutate()} />
+            <Button title={tr('account.manageSubscription')} variant="secondary" size="lg" fullWidth loading={manage.isPending} onPress={() => manage.mutate()} />
           ) : (
             <Button title={ctaTitle} variant="primary" size="lg" fullWidth disabled={ctaDisabled} loading={checkout.isPending} onPress={buy} />
           )}
@@ -197,9 +205,9 @@ const PlansScreen: React.FC<RootScreenProps<'Plans'>> = ({ route, navigation }) 
             {footnote}
           </Text>
           <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', columnGap: 16, rowGap: 4, marginTop: 6 }}>
-            {useStore ? <FooterLink label={restore.isPending ? 'Restoring…' : 'Restore purchases'} onPress={() => !restore.isPending && restore.mutate()} /> : null}
-            {!USE_MOCK_API ? <FooterLink label="Terms" onPress={() => Linking.openURL(LEGAL_URLS.terms)} /> : null}
-            {!USE_MOCK_API ? <FooterLink label="Privacy" onPress={() => Linking.openURL(LEGAL_URLS.privacy)} /> : null}
+            {useStore ? <FooterLink label={restore.isPending ? tr('plans.restoring') : tr('plans.restore')} onPress={() => !restore.isPending && restore.mutate()} /> : null}
+            {!USE_MOCK_API ? <FooterLink label={tr('plans.terms')} onPress={() => Linking.openURL(LEGAL_URLS.terms)} /> : null}
+            {!USE_MOCK_API ? <FooterLink label={tr('plans.privacy')} onPress={() => Linking.openURL(LEGAL_URLS.privacy)} /> : null}
           </View>
         </View>
       </SafeAreaView>

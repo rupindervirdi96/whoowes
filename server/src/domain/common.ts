@@ -6,9 +6,12 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { db, type UserDoc } from '../db/index.js';
 
-/** Throw from a route; the error handler turns it into JSON. */
-export function fail(status: number, message: string, code?: string): never {
-  throw Object.assign(new Error(message), { status, code });
+/**
+ * Throw from a route; the error handler turns it into JSON. Write the message in
+ * English with {placeholders}; it is translated to the user's language on the way out.
+ */
+export function fail(status: number, message: string, code?: string, params?: Record<string, string | number>): never {
+  throw Object.assign(new Error(message), { status, code, params });
 }
 
 /** Wraps an async route so thrown errors reach Express. */
@@ -39,6 +42,8 @@ export function publicUser(u: UserDoc, viewerId: string) {
     email: self ? (u.email ?? '') : '',
     phone: self ? u.phone : undefined,
     avatarUrl: u.avatarUrl ?? undefined,
+    /** Preferred currency (only sent to its owner). */
+    currency: self ? (u.currency ?? undefined) : undefined,
     createdAt: iso(u.createdAt)!,
     updatedAt: iso(u.updatedAt)!,
   };
@@ -59,6 +64,7 @@ export const deletedUser = (id: string): PublicUser => ({
   email: '',
   avatarUrl: undefined,
   phone: undefined,
+  currency: undefined,
   createdAt: new Date(0).toISOString(),
   updatedAt: new Date(0).toISOString(),
 });

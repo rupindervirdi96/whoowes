@@ -3,6 +3,7 @@ import { Animated, Easing, Modal, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import Text from './Text';
+import { translate } from '../../i18n';
 
 interface BottomSheetProps {
   visible: boolean;
@@ -33,7 +34,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({ visible, onClose, title, subt
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <Animated.View style={{ flex: 1, backgroundColor: t.colors.overlay, opacity: anim }}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
+        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel={translate('common.close')} />
       </Animated.View>
       <Animated.View
         style={{

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { Expense } from '../types';
 import { useTheme } from '../theme';
+import { useT } from '../i18n';
 import { formatCurrency } from '../utils/currency';
 import { formatSmartDate } from '../utils/date';
 import { expenseForMe, firstName } from '../utils/money';
@@ -21,15 +22,19 @@ interface ExpenseRowProps {
 /** One expense: what it was, who paid, and what it means for me. */
 const ExpenseRow: React.FC<ExpenseRowProps> = ({ expense, myId, divider }) => {
   const t = useTheme();
+  const { t: tr } = useT();
   const navigation = useNavigation();
   const mine = expenseForMe(expense, myId);
-  const payer = expense.paidBy === myId ? 'You' : firstName(expense.paidByUser.name);
+  const total = formatCurrency(expense.amount, expense.currency);
+  const share = formatCurrency(mine.amount, expense.currency);
+  const paidLine =
+    expense.paidBy === myId ? tr('expenseRow.youPaid', { amount: total }) : tr('expenseRow.theyPaid', { name: firstName(expense.paidByUser.name), amount: total });
   const tone = mine.tone === 'tertiary' ? 'tertiary' : mine.tone;
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${expense.title}, ${formatCurrency(expense.amount)}, ${mine.label} ${formatCurrency(mine.amount)}`}
+      accessibilityLabel={`${expense.title}, ${total}, ${mine.label} ${share}`}
       onPress={() => navigation.navigate('ExpenseDetail', { expenseId: expense.id })}
       style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, opacity: pressed ? 0.6 : 1 })}
     >
@@ -42,11 +47,11 @@ const ExpenseRow: React.FC<ExpenseRowProps> = ({ expense, myId, divider }) => {
           {expense.receiptId ? <Icon name="receipt-long" size={14} color={t.colors.textTertiary} /> : null}
         </View>
         <Text variant="caption" tone="tertiary" numberOfLines={1} style={{ marginTop: 3 }}>
-          {payer} paid {formatCurrency(expense.amount, expense.currency)} · {formatSmartDate(expense.date)}
+          {paidLine} · {formatSmartDate(expense.date)}
         </Text>
       </View>
       {mine.amount > 0 ? (
-        <RowAmount amount={formatCurrency(mine.amount, expense.currency)} caption={mine.label} tone={tone} />
+        <RowAmount amount={share} caption={mine.label} tone={tone} />
       ) : (
         <Text variant="caption" tone="tertiary">
           {mine.label}
