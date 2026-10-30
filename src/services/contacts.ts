@@ -10,7 +10,8 @@
  * The address book itself is never uploaded or stored.
  */
 
-import * as Contacts from 'expo-contacts';
+// SDK 58 moved the classic functions to /legacy; the main entry now throws for them.
+import * as Contacts from 'expo-contacts/legacy';
 import { USE_MOCK_API } from '../config';
 import { DEMO_ADDRESS_BOOK } from '../constants/sampleData';
 import type { ContactFriendState, ContactMatch, ContactMatchResult, ContactsPermission, User } from '../types';
@@ -29,7 +30,8 @@ interface RawContact {
 async function available() {
   try {
     return await Contacts.isAvailableAsync();
-  } catch {
+  } catch (err) {
+    if (__DEV__) console.warn('Contacts not available:', err);
     return false;
   }
 }
