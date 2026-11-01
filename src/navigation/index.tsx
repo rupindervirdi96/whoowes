@@ -3,7 +3,7 @@
  * detail and modal screen in a single native stack.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { DarkTheme, DefaultTheme, NavigationContainer, Theme as NavTheme } from '@react-navigation/native';
 import { createNativeStackNavigator, NativeStackNavigationOptions } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
@@ -11,6 +11,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useAuthStore } from '../store/authStore';
 import { useStoreIdentity } from '../hooks/useBilling';
 import { useEnsureCurrency } from '../hooks/useCurrency';
+import { navigationRef, usePushNotifications } from '../hooks/useNotifications';
 import { useT } from '../i18n';
 import { useTheme } from '../theme';
 import AuthNavigator from './AuthNavigator';
@@ -41,6 +42,8 @@ const RootNavigator: React.FC = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   useStoreIdentity();
   useEnsureCurrency();
+  const [navReady, setNavReady] = useState(false);
+  usePushNotifications(navReady);
 
   const navTheme = useMemo<NavTheme>(() => {
     const base = t.isDark ? DarkTheme : DefaultTheme;
@@ -73,7 +76,7 @@ const RootNavigator: React.FC = () => {
   const modal: NativeStackNavigationOptions = { presentation: 'modal', animation: 'slide_from_bottom' };
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={navigationRef} theme={navTheme} onReady={() => setNavReady(true)}>
       <StatusBar style={t.isDark ? 'light' : 'dark'} />
       <Stack.Navigator screenOptions={screenOptions}>
         {!isAuthenticated ? (

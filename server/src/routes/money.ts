@@ -37,6 +37,7 @@ import { db, type ExpenseDoc, type ReceiptDoc, type SettlementDoc } from '../db/
 import { areFriends, canTransactWith, fail, isGroupMember, iso, myGroupIds, route, toCents } from '../domain/common.js';
 import { loadGroups, serializeExpenses, serializeSettlements } from '../domain/serialize.js';
 import { FALLBACK_CURRENCY, currencyCode } from '../currency.js';
+import { nameOf, notify, type PushItem } from '../push.js';
 
 export const moneyRouter = Router();
 moneyRouter.use(requireUser);
@@ -115,6 +116,17 @@ moneyRouter.post(
       createdAt: now,
       updatedAt: now,
     });
+    if (memberIds.length) {
+      const name = await nameOf(me);
+      notify(
+        memberIds.map((userId) => ({
+          userId,
+          kind: 'added_to_group' as const,
+          params: { name, group: body.name },
+          data: { type: 'added_to_group' as const, groupId: id },
+        })),
+      );
+    }
     res.status(201).json((await loadGroups([id], me))[0]);
   }),
 );
@@ -155,6 +167,15 @@ moneyRouter.post(
       { $push: { members: { userId, role: 'member', joinedAt: new Date() } }, $set: { updatedAt: new Date() } },
     );
     if (added.modifiedCount === 0) fail(409, 'Already in this group.');
+    const group = await db.groups.findOne({ _id: groupId }, { projection: { name: 1 } });
+    notify([
+      {
+        userId,
+        kind: 'added_to_group',
+        params: { name: await nameOf(me), group: group?.name ?? '' },
+        data: { type: 'added_to_group', groupId },
+      },
+    ]);
     res.json((await loadGroups([groupId], me))[0]);
   }),
 );
@@ -296,6 +317,7 @@ moneyRouter.post(
     await db.expenses.insertOne(expense);
     if (body.receiptId) await db.receipts.updateOne({ _id: body.receiptId }, { $set: { expenseId: expense._id } });
     if (body.groupId) await touchGroup(body.groupId);
+    notify(await expenseNotifications(expense, me));
     res.status(201).json((await serializeExpenses([expense], me))[0]);
   }),
 );
@@ -409,6 +431,14 @@ moneyRouter.post(
       updatedAt: now,
     };
     await db.settlements.insertOne(doc);
+    notify([
+      {
+        userId: doc.toUserId,
+        kind: 'payment_recorded',
+        params: { name: await nameOf(me), cents: doc.amountCents, currency: doc.currency },
+        data: { type: 'payment_recorded', settlementId: doc._id },
+      },
+    ]);
     res.status(201).json((await serializeSettlements([doc], me))[0]);
   }),
 );
@@ -440,6 +470,14 @@ moneyRouter.post(
       // They've been paid: clear their reminders to the payer.
       await db.reminders.updateMany({ fromUserId: s.toUserId, toUserId: s.fromUserId, dismissedAt: null }, { $set: { dismissedAt: now } });
     }
+    notify([
+      {
+        userId: s.fromUserId,
+        kind: confirmed ? 'payment_confirmed' : 'payment_declined',
+        params: { name: await nameOf(me), cents: s.amountCents, currency: s.currency },
+        data: { type: confirmed ? 'payment_confirmed' : 'payment_declined', settlementId: s._id },
+      },
+    ]);
     res.json((await serializeSettlements([row], me))[0]);
   }),
 );
@@ -455,6 +493,32 @@ moneyRouter.delete(
     res.status(204).end();
   }),
 );
+
+/**
+ * Who hears about a new expense: everyone on it except whoever added it, each
+ * told what it means for them ("You owe $12.50" or "You get back $37.50").
+ * People with nothing owed either way aren't disturbed.
+ */
+async function expenseNotifications(e: ExpenseDoc, me: string): Promise<PushItem[]> {
+  const others = e.participants.filter((id) => id !== me);
+  if (!others.length) return [];
+  const name = await nameOf(me);
+  const group = e.groupId ? (await db.groups.findOne({ _id: e.groupId }, { projection: { name: 1 } }))?.name : undefined;
+  const items: PushItem[] = [];
+  for (const userId of others) {
+    const own = e.splits.find((s) => s.userId === userId)?.amountCents ?? 0;
+    const isPayer = e.paidBy === userId;
+    const cents = isPayer ? e.amountCents - own : own;
+    if (cents <= 0) continue;
+    items.push({
+      userId,
+      kind: isPayer ? 'expense_owed' : 'expense_owe',
+      params: { name, title: e.title, group, cents, currency: e.currency },
+      data: { type: 'expense_added', expenseId: e._id },
+    });
+  }
+  return items;
+}
 
 // ─── Receipts ────────────────────────────────────────────────────────────────
 

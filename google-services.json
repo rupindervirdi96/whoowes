@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "74211120388",
+    "project_id": "whoowes-df719",
+    "storage_bucket": "whoowes-df719.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:74211120388:android:9bc5fd6aca81fd72e06c51",
+        "android_client_info": {
+          "package_name": "com.whoowes.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3U_2mzZslCg8SpnD2kOE-FP5nn1nGi2Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -46,6 +46,12 @@ const schema = z.object({
   REVIEW_PHONE: z.preprocess((v) => (v === '' ? undefined : v), z.string().regex(/^\+[1-9]\d{6,14}$/).optional()),
   REVIEW_CODE: z.preprocess((v) => (v === '' ? undefined : v), z.string().regex(/^\d{6}$/).optional()),
 
+  /**
+   * Optional Expo access token for sending push notifications. Only needed if
+   * "Enhanced push security" is turned on for the project at expo.dev.
+   */
+  EXPO_ACCESS_TOKEN: optional(),
+
   /** Shown on the privacy, terms and account deletion pages. */
   SUPPORT_EMAIL: optional(),
 

@@ -77,7 +77,15 @@
           "contactsPermission": "WhoOwes checks your contacts to show which friends are already on WhoOwes. Numbers are hashed on your phone and never stored."
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#5B4CF5",
+          "defaultChannel": "money"
+        }
+      ]
     ],
     "extra": {
       "eas": {

@@ -104,6 +104,18 @@ Expo Go is for testing. To give the app to others, build it with `EXPO_PUBLIC_AP
 - **Local build without Expo's servers**: `npx expo prebuild --platform android`, then `cd android` and `gradlew assembleRelease`. This reads `.env`. It needs Android Studio and a Java JDK.
 - **iPhone / app stores**: `eas build` + `eas submit` (iOS needs an Apple Developer account).
 
+### Push notifications
+
+The server sends a notification when someone sends or accepts a friend request, adds an expense you're on (with what you owe or get back), reminds you to pay, records a payment to you, confirms or declines your payment, or adds you to a group. Tapping one opens that screen. They go through Expo's free push service (`server/src/push.ts`); the app registers each phone after sign-in (`src/services/notifications.ts`).
+
+They work in installed builds (APK, Play Store, TestFlight), not in Expo Go on Android. One-time setup:
+
+1. **Android (Firebase)**: at [console.firebase.google.com](https://console.firebase.google.com) create a project → add an Android app with package `com.whoowes.app` → download `google-services.json` into the project root (it isn't secret; `app.config.js` picks it up). Then in Firebase **Project settings → Service accounts → Generate new private key**, and upload that JSON with `npx eas-cli credentials` → Android → production → **Google Service Account → FCM V1**. Delete the downloaded key afterwards.
+2. **iPhone**: `eas build` sets up the Apple push key for you when asked (needs the Apple Developer account).
+3. Rebuild the app. The server needs no changes; `EXPO_ACCESS_TOKEN` is only needed if you turn on "Enhanced push security" at expo.dev.
+
+People can mute "Friends & groups" and keep "Money" alerts in Android's notification settings for the app.
+
 ---
 
 ## Payments

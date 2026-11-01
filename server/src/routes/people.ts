@@ -4,6 +4,8 @@
  *   GET    /me                          my profile
  *   PATCH  /me                          { name?, email?, avatarUrl?, currency? }
  *   DELETE /me                          delete my account (required by the app stores)
+ *   POST   /me/push-tokens              { token, platform, lang }  → this phone gets my notifications
+ *   POST   /me/push-tokens/remove       { token }  (on sign-out)
  *   GET    /users/search?q=             exact phone/email, or names of people I share a group with
  *   GET    /friends                     accepted friends
  *   GET    /friends/requests            pending requests, both directions
@@ -40,6 +42,7 @@ import {
 } from '../domain/common.js';
 import { limited } from './phone.js';
 import { currencyCode } from '../currency.js';
+import { isExpoPushToken, nameOf, notify } from '../push.js';
 
 export const peopleRouter = Router();
 peopleRouter.use(requireUser);
@@ -116,6 +119,7 @@ peopleRouter.delete(
     // Receipt readings and Quick Add text are personal; the expenses made from them stay.
     await db.receipts.deleteMany({ userId: me });
     await db.aiUsage.deleteMany({ userId: me });
+    await db.pushTokens.deleteMany({ userId: me });
     // Google Play / App Store subscriptions can only be cancelled by the user in
     // the store; the app reminds them before deleting.
     await db.users.updateOne(
@@ -132,6 +136,39 @@ peopleRouter.delete(
         },
       },
     );
+    res.status(204).end();
+  }),
+);
+
+// ─── Push notifications ──────────────────────────────────────────────────────
+
+peopleRouter.post(
+  '/me/push-tokens',
+  route(async (req, res) => {
+    const me = req.user!.id;
+    const body = z
+      .object({
+        token: z.string().max(200).refine(isExpoPushToken, 'Not an Expo push token'),
+        platform: z.enum(['ios', 'android']),
+        lang: z.enum(['en', 'fr', 'es', 'hi']).default('en'),
+      })
+      .parse(req.body);
+    // A phone belongs to whoever signed in last, so a shared phone never gets someone else's alerts.
+    const now = new Date();
+    await db.pushTokens.updateOne(
+      { _id: body.token },
+      { $set: { userId: me, platform: body.platform, lang: body.lang, updatedAt: now }, $setOnInsert: { createdAt: now } },
+      { upsert: true },
+    );
+    res.status(204).end();
+  }),
+);
+
+peopleRouter.post(
+  '/me/push-tokens/remove',
+  route(async (req, res) => {
+    const { token } = z.object({ token: z.string().max(200) }).parse(req.body);
+    await db.pushTokens.deleteOne({ _id: token, userId: req.user!.id });
     res.status(204).end();
   }),
 );
@@ -222,6 +259,12 @@ peopleRouter.post(
         throw err;
       }
     }
+    const name = await nameOf(me);
+    notify([
+      result!.status === 'accepted'
+        ? { userId: targetId, kind: 'friend_accepted', params: { name }, data: { type: 'friend_accepted', userId: me } }
+        : { userId: targetId, kind: 'friend_request', params: { name }, data: { type: 'friend_request', userId: me } },
+    ]);
     res.status(201).json((await serializeFriendships([result], me))[0]);
   }),
 );
@@ -236,6 +279,9 @@ peopleRouter.post(
       { returnDocument: 'after' },
     );
     if (!row) fail(404, 'Request not found.');
+    notify([
+      { userId: row.requesterId, kind: 'friend_accepted', params: { name: await nameOf(me) }, data: { type: 'friend_accepted', userId: me } },
+    ]);
     res.json((await serializeFriendships([row], me))[0]);
   }),
 );
@@ -279,6 +325,14 @@ peopleRouter.post(
       createdAt: new Date(),
       dismissedAt: null,
     });
+    notify([
+      {
+        userId: to,
+        kind: 'reminder',
+        params: { name: await nameOf(me), cents: amount ? toCents(amount) : null, currency: amount ? (currency ?? null) : null },
+        data: { type: 'reminder', userId: me },
+      },
+    ]);
     res.status(201).json({ ok: true });
   }),
 );

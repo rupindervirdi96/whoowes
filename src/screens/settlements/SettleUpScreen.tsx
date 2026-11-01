@@ -245,7 +245,7 @@ const SettleUpScreen: React.FC<RootScreenProps<'SettleUp'>> = ({ route, navigati
         <>
           <AmountInput value={amount} onChangeText={setAmount} currency={currency} onCurrencyPress={() => setPickerOpen(true)} autoFocus={!params.amount} />
           {net < 0 && value !== Math.abs(net) ? (
-            <View style={{ alignItems: 'center', marginTop: -6, marginBottom: 8 }}>
+            <View style={{ alignItems: 'flex-start', marginTop: -4, marginBottom: 12 }}>
               <Chip label={tr('settle.fullAmount', { amount: formatCurrency(-net, currency) })} onPress={() => setAmount(amountToInput(-net, currency))} />
             </View>
           ) : null}

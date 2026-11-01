@@ -41,11 +41,15 @@ const FriendService = {
         (f.userId === userId && f.friendId === target.id) ||
         (f.userId === target.id && f.friendId === userId),
     );
+    if (existing?.status === 'accepted') {
+      return Promise.reject({ message: 'You are already friends', statusCode: 409 });
+    }
+    if (existing && existing.userId === userId) {
+      return Promise.reject({ message: 'Request already sent', statusCode: 409 });
+    }
     if (existing) {
-      return Promise.reject({
-        message: existing.status === 'accepted' ? 'You are already friends' : 'Request already pending',
-        statusCode: 409,
-      });
+      // They already asked me: adding them back accepts it (same as the server).
+      return FriendService.acceptFriendRequest(userId, existing.id);
     }
     const friend: Friend = {
       id: generateId(),
@@ -64,6 +68,10 @@ const FriendService = {
     const idx = db.friends.findIndex((f) => f.id === requestId);
     if (idx === -1) return Promise.reject({ message: 'Request not found', statusCode: 404 });
     const req = db.friends[idx];
+    // Only the person who received the request can accept it.
+    if (req.status !== 'pending' || req.friendId !== currentUserId) {
+      return Promise.reject({ message: 'Request not found', statusCode: 404 });
+    }
     const requester = db.users.find((u) => u.id === req.userId) ?? req.friendUser;
     // Re-store from my perspective so getFriends() finds it.
     const accepted: Friend = {

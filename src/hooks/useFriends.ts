@@ -48,7 +48,9 @@ export function useAddFriend() {
     mutationFn: (payload: AddFriendPayload) => FriendService.addFriend(userId, payload),
     onSuccess: (f) => {
       invalidateFriendData(queryClient);
-      showToast(translate('toast.requestSent', { name: f.friendUser.name.split(' ')[0] }), 'success');
+      // Adding someone who already asked me accepts their request instead.
+      const name = f.friendUser.name.split(' ')[0];
+      showToast(translate(f.status === 'accepted' ? 'toast.nowFriends' : 'toast.requestSent', { name }), 'success');
     },
     onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotSendRequest'), 'error'),
   });
@@ -68,11 +70,14 @@ export function useAcceptFriendRequest() {
   });
 }
 
+/** Declines a request I received, or cancels one I sent. */
 export function useDeclineFriendRequest() {
   const queryClient = useQueryClient();
+  const showToast = useShowToast();
   return useMutation({
     mutationFn: (requestId: string) => FriendService.declineFriendRequest(requestId),
     onSuccess: () => invalidateFriendData(queryClient),
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotUpdate'), 'error'),
   });
 }
 

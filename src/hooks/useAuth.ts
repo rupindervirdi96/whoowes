@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/authStore';
 import { useShowToast } from '../store/uiStore';
 import type { MutationError } from './queryUtils';
 import { translate } from '../i18n';
+import { unregisterPush } from '../services/notifications';
 
 export function useLogin() {
   const setAuth = useAuthStore((s) => s.setAuth);
@@ -33,7 +34,11 @@ export function useLogout() {
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => AuthService.logout(),
+    mutationFn: async () => {
+      // While still signed in: stop this phone getting the account's notifications.
+      await unregisterPush();
+      await AuthService.logout();
+    },
     onSettled: () => {
       clearAuth();
       queryClient.clear();

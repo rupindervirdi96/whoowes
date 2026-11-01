@@ -94,7 +94,13 @@ const FriendsScreen: React.FC = () => {
                 divider={i < incoming.length - 1}
                 trailing={
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <IconButton icon="close" variant="ghost" size={36} accessibilityLabel={tr('friends.decline', { name: r.friendUser.name })} onPress={() => decline.mutate(r.id)} />
+                    <IconButton
+                      icon="close"
+                      variant="ghost"
+                      size={36}
+                      accessibilityLabel={tr('friends.decline', { name: r.friendUser.name })}
+                      onPress={() => !(decline.isPending && decline.variables === r.id) && decline.mutate(r.id)}
+                    />
                     <Button title={tr('common.accept')} size="sm" onPress={() => accept.mutate(r.id)} loading={accept.isPending && accept.variables === r.id} />
                   </View>
                 }
@@ -148,10 +154,20 @@ const FriendsScreen: React.FC = () => {
             {outgoing.map((r, i) => (
               <ListRow
                 key={r.id}
-                leading={<Avatar name={r.friendUser.name} />}
+                leading={<Avatar name={r.friendUser.name} uri={r.friendUser.avatarUrl} />}
                 title={r.friendUser.name}
                 subtitle={tr('friends.waitingToAccept')}
                 divider={i < outgoing.length - 1}
+                trailing={
+                  <Button
+                    title={tr('common.cancel')}
+                    size="sm"
+                    variant="ghost"
+                    accessibilityLabel={tr('friends.cancelRequest', { name: r.friendUser.name })}
+                    loading={decline.isPending && decline.variables === r.id}
+                    onPress={() => decline.mutate(r.id)}
+                  />
+                }
               />
             ))}
           </ListCard>

@@ -179,6 +179,18 @@ export interface AiUsageDoc {
   scans: number;
 }
 
+/** A phone that receives a user's push notifications. One user can have several. */
+export interface PushTokenDoc {
+  /** The Expo push token, e.g. ExponentPushToken[xxxx]. */
+  _id: string;
+  userId: string;
+  platform: 'ios' | 'android';
+  /** The app's language on that phone, so notifications arrive in it. */
+  lang: 'en' | 'fr' | 'es' | 'hi';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface ProcessedEventDoc {
   /** The Stripe event id. */
   _id: string;
@@ -198,6 +210,7 @@ interface Collections {
   billingAccounts: Collection<BillingAccountDoc>;
   aiUsage: Collection<AiUsageDoc>;
   processedEvents: Collection<ProcessedEventDoc>;
+  pushTokens: Collection<PushTokenDoc>;
 }
 
 let client: MongoClient | null = null;
@@ -224,6 +237,7 @@ async function createIndexes(c: Collections) {
     c.settlements.createIndexes([{ key: { fromUserId: 1 } }, { key: { toUserId: 1, status: 1 } }, { key: { groupId: 1 } }]),
     c.reminders.createIndexes([{ key: { toUserId: 1, createdAt: -1 } }, { key: { fromUserId: 1, toUserId: 1, createdAt: -1 } }]),
     c.receipts.createIndexes([{ key: { userId: 1 } }]),
+    c.pushTokens.createIndexes([{ key: { userId: 1 } }]),
     c.billingAccounts.createIndexes([
       { key: { stripeCustomerId: 1 }, unique: true, partialFilterExpression: { stripeCustomerId: { $type: 'string' } } },
     ]),
@@ -252,6 +266,7 @@ export async function initDb(): Promise<void> {
     billingAccounts: d.collection<BillingAccountDoc>('billing_accounts'),
     aiUsage: d.collection<AiUsageDoc>('ai_usage'),
     processedEvents: d.collection<ProcessedEventDoc>('processed_events'),
+    pushTokens: d.collection<PushTokenDoc>('push_tokens'),
   };
   await createIndexes(collections);
   console.log(`[db] ready (${label})`);

@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Modal, Pressable, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Keyboard, Modal, Platform, Pressable, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import Text from './Text';
@@ -18,9 +18,13 @@ const BottomSheet: React.FC<BottomSheetProps> = ({ visible, onClose, title, subt
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const anim = useRef(new Animated.Value(0)).current;
+  const { height: windowHeight } = useWindowDimensions();
+  const keyboard = useKeyboardHeight(visible);
 
   useEffect(() => {
     if (visible) {
+      // Close the screen's keyboard first, or it covers the sheet.
+      Keyboard.dismiss();
       anim.setValue(0);
       Animated.timing(anim, {
         toValue: 1,
@@ -41,13 +45,14 @@ const BottomSheet: React.FC<BottomSheetProps> = ({ visible, onClose, title, subt
           position: 'absolute',
           left: 0,
           right: 0,
-          bottom: 0,
-          maxHeight: '88%',
+          // Sit on top of the keyboard, so a search field inside stays visible.
+          bottom: keyboard,
+          maxHeight: keyboard ? windowHeight - keyboard - insets.top - 12 : '88%',
           backgroundColor: t.colors.surface,
           borderTopLeftRadius: t.radius['2xl'],
           borderTopRightRadius: t.radius['2xl'],
           paddingHorizontal: t.spacing.lg,
-          paddingBottom: insets.bottom + t.spacing.base,
+          paddingBottom: (keyboard ? 0 : insets.bottom) + t.spacing.base,
           transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [500, 0] }) }],
         }}
       >
@@ -77,5 +82,24 @@ const BottomSheet: React.FC<BottomSheetProps> = ({ visible, onClose, title, subt
     </Modal>
   );
 };
+
+/** Keyboard height while the sheet is open (0 when hidden). */
+function useKeyboardHeight(active: boolean) {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (!active || Platform.OS === 'web') return;
+    // iOS reports "will" events, so the sheet moves with the keyboard; Android only "did".
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, (e) => setHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener(hideEvt, () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+      setHeight(0);
+    };
+  }, [active]);
+  return height;
+}
 
 export default BottomSheet;

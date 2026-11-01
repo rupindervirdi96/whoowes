@@ -269,6 +269,27 @@ export function splitReceiptItems(
   return Object.fromEntries(floors.map((f) => [f.id, roundToCents(f.units / unit)]));
 }
 
+/**
+ * Splits `total` in proportion to each person's shares (e.g. 2 nights vs 1).
+ * Leftover cents go to the largest fractions, so the parts always add up.
+ * Returns {} when nobody has a share.
+ */
+export function splitByShares(total: number, shares: Record<string, number>, decimals = 2): Record<string, number> {
+  const ids = Object.keys(shares).filter((id) => shares[id] > 0);
+  const sum = ids.reduce((s, id) => s + shares[id], 0);
+  if (!ids.length || sum <= 0) return {};
+  const unit = 10 ** decimals;
+  const totalUnits = Math.round(total * unit);
+  const parts = ids.map((id) => {
+    const exact = (totalUnits * shares[id]) / sum;
+    return { id, units: Math.floor(exact), frac: exact - Math.floor(exact) };
+  });
+  let leftover = totalUnits - parts.reduce((s, p) => s + p.units, 0);
+  const byFrac = [...parts].sort((a, b) => b.frac - a.frac);
+  for (let i = 0; leftover > 0; i = (i + 1) % byFrac.length, leftover--) byFrac[i].units += 1;
+  return Object.fromEntries(parts.map((p) => [p.id, roundToCents(p.units / unit)]));
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**

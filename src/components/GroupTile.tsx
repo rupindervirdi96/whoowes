@@ -23,7 +23,13 @@ const GroupTile: React.FC<{ name: string; size?: number }> = ({ name, size = 48 
         justifyContent: 'center',
       }}
     >
-      <Text weight="extrabold" color={t.isDark ? '#FFFFFF' : color} style={{ fontSize: size * 0.42, lineHeight: size * 0.52 }}>
+      <Text
+        weight="extrabold"
+        align="center"
+        color={t.isDark ? '#FFFFFF' : color}
+        // A line height that fits the glyph keeps the letter centered (a tight one clips and shifts it up).
+        style={{ fontSize: size * 0.42, lineHeight: Math.round(size * 0.42 * 1.25), includeFontPadding: false, textAlignVertical: 'center' }}
+      >
         {letter}
       </Text>
     </View>

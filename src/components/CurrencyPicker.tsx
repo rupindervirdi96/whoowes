@@ -45,7 +45,8 @@ const CurrencyPicker: React.FC<CurrencyPickerProps> = ({ visible, onClose, value
         data={rows}
         keyExtractor={(c) => c}
         keyboardShouldPersistTaps="handled"
-        style={{ maxHeight: 420 }}
+        // Shrinks when the keyboard is up so the list stays above it.
+        style={{ maxHeight: 420, flexShrink: 1 }}
         initialNumToRender={20}
         ListEmptyComponent={
           <Text tone="tertiary" style={{ paddingVertical: 16 }}>
