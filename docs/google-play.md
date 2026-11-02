@@ -76,14 +76,11 @@ Until this is on, the server's 30-second timer is the only check.
 
 ### 4c. Ids into the build
 
-```bash
-npx eas-cli env:create --name ADMOB_ANDROID_APP_ID --value "ca-app-pub-XXXX~YYYY" --environment production --visibility plaintext
-```
-
-and add the ad unit id to the `production` profile's `env` in `eas.json`:
+Both ids are in the `production` profile's `env` in `eas.json` (they aren't secret; they ship inside the app):
 
 ```json
-"EXPO_PUBLIC_ADMOB_REWARDED_ANDROID": "ca-app-pub-XXXX/ZZZZ"
+"ADMOB_ANDROID_APP_ID": "ca-app-pub-6897494524743993~9384517413",
+"EXPO_PUBLIC_ADMOB_REWARDED_ANDROID": "ca-app-pub-6897494524743993/5219534989"
 ```
 
 Then rebuild. Builds without these show Google's test ads (and earn nothing). Development builds always show test ads, so you never click your own real ads (AdMob bans accounts for that).

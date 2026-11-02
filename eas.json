@@ -21,7 +21,9 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://whoowes-api-nbi9.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://whoowes-api-nbi9.onrender.com",
+        "ADMOB_ANDROID_APP_ID": "ca-app-pub-6897494524743993~9384517413",
+        "EXPO_PUBLIC_ADMOB_REWARDED_ANDROID": "ca-app-pub-6897494524743993/5219534989"
       },
       "autoIncrement": true
     }
