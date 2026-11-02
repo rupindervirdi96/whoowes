@@ -4,11 +4,12 @@
  * (userId = me, friendUser = them). Incoming requests have friendId = me.
  */
 
-import { Friend, User, AddFriendPayload } from '../../types';
+import { Friend, User, AddFriendPayload, FriendPrefsPayload } from '../../types';
 import { generateId } from '../../utils/idGenerator';
 import { nowISO } from '../../utils/date';
 import { mockDelay } from './mockHelpers';
 import { db } from './db';
+import { REMIND_COOLDOWN_MS } from '../../constants';
 
 const FriendService = {
   async getFriends(userId: string): Promise<Friend[]> {
@@ -80,6 +81,7 @@ const FriendService = {
       friendId: requester.id,
       friendUser: requester,
       status: 'accepted',
+      friendsSince: nowISO(),
     };
     db.friends[idx] = accepted;
     return accepted;
@@ -102,6 +104,18 @@ const FriendService = {
     );
   },
 
+  /** My private nickname and pin for a friend. */
+  async updateFriend(friendUserId: string, prefs: FriendPrefsPayload): Promise<Friend> {
+    await mockDelay(250);
+    const idx = db.friends.findIndex((f) => f.friendId === friendUserId && f.status === 'accepted');
+    if (idx === -1) return Promise.reject({ message: 'You are not friends with this person.', statusCode: 404 });
+    const next: Friend = { ...db.friends[idx] };
+    if (prefs.nickname !== undefined) next.nickname = prefs.nickname?.trim() || undefined;
+    if (prefs.pinned !== undefined) next.pinned = prefs.pinned || undefined;
+    db.friends[idx] = next;
+    return next;
+  },
+
   async searchUsers(currentUserId: string, query: string): Promise<User[]> {
     await mockDelay(350);
     const q = query.trim().toLowerCase();
@@ -114,9 +128,15 @@ const FriendService = {
     );
   },
 
-  /** Sends a payment reminder. Real backend: push notification + email. */
-  async remind(_friendUserId: string, _amount?: number, _currency?: string): Promise<void> {
+  /** Sends a payment reminder. Like the server, at most one per person every 12 hours. */
+  async remind(friendUserId: string, _amount?: number, _currency?: string): Promise<void> {
     await mockDelay(500);
+    const idx = db.friends.findIndex((f) => f.friendId === friendUserId && f.status === 'accepted');
+    const last = idx === -1 ? undefined : db.friends[idx].lastRemindedAt;
+    if (last && Date.now() - new Date(last).getTime() < REMIND_COOLDOWN_MS) {
+      return Promise.reject({ message: 'You already sent a reminder today. Give them a little time.', statusCode: 429 });
+    }
+    if (idx !== -1) db.friends[idx] = { ...db.friends[idx], lastRemindedAt: nowISO() };
   },
 };
 

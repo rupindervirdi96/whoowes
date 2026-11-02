@@ -95,6 +95,20 @@ export interface Friend {
   friendUser: User;       // populated friend user object
   status: FriendStatus;
   createdAt: string;
+  /** When the request was accepted. */
+  friendsSince?: string;
+  /** Private to me: what I call them ("Roommate"). */
+  nickname?: string;
+  /** Private to me: kept at the top of my list. */
+  pinned?: boolean;
+  /** When I last sent them a payment reminder. */
+  lastRemindedAt?: string;
+}
+
+/** Changes to my private settings for a friend. null clears the nickname. */
+export interface FriendPrefsPayload {
+  nickname?: string | null;
+  pinned?: boolean;
 }
 
 export interface AddFriendPayload {

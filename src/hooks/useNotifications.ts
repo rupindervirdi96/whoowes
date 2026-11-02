@@ -2,18 +2,32 @@ import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { createNavigationContainerRef } from '@react-navigation/native';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { RootStackParamList } from '../types/navigation';
 import { useAuthStore } from '../store/authStore';
 import { useLanguage } from '../i18n';
 import { QUERY_KEYS } from '../constants';
 import { invalidateMoney } from './queryUtils';
+import { invalidateFriendData } from './useFriends';
 import { configureNotificationDisplay, pushSupported, registerForPush, type PushData } from '../services/notifications';
 
 /** Lets code outside screens (notification taps) navigate. Passed to NavigationContainer. */
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 configureNotificationDisplay();
+
+/** Reloads what a notification is about, so open screens show it. */
+function refreshFor(queryClient: QueryClient, type: PushData['type'] | undefined) {
+  if (type === 'friend_request' || type === 'friend_accepted') {
+    invalidateFriendData(queryClient);
+  } else if (type === 'reminder') {
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.REMINDERS });
+  } else if (type === 'added_to_group') {
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.GROUPS });
+  } else {
+    invalidateMoney(queryClient);
+  }
+}
 
 /** Opens the screen a notification is about. */
 function openFor(data: Partial<PushData> | undefined) {
@@ -69,16 +83,7 @@ export function usePushNotifications(navReady: boolean) {
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const sub = Notifications.addNotificationReceivedListener((n) => {
-      const type = (n.request.content.data as Partial<PushData> | undefined)?.type;
-      if (type === 'friend_request' || type === 'friend_accepted') {
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.FRIENDS });
-      } else if (type === 'reminder') {
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.REMINDERS });
-      } else if (type === 'added_to_group') {
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.GROUPS });
-      } else {
-        invalidateMoney(queryClient);
-      }
+      refreshFor(queryClient, (n.request.content.data as Partial<PushData> | undefined)?.type);
     });
     return () => sub.remove();
   }, [queryClient]);
@@ -89,9 +94,12 @@ export function usePushNotifications(navReady: boolean) {
     if (lastResponse.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
     const id = lastResponse.notification.request.identifier;
     if (handled.current === id) return;
-    if (openFor(lastResponse.notification.request.content.data as Partial<PushData>)) {
+    const data = lastResponse.notification.request.content.data as Partial<PushData>;
+    if (openFor(data)) {
+      // It may have arrived while the app was closed, so nothing was reloaded yet.
+      refreshFor(queryClient, data.type);
       handled.current = id;
       Notifications.clearLastNotificationResponseAsync?.().catch(() => {});
     }
-  }, [lastResponse, navReady, signedIn]);
+  }, [lastResponse, navReady, signedIn, queryClient]);
 }

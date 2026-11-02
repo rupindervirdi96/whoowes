@@ -15,6 +15,9 @@ export const STORAGE_KEYS = {
   DEMO_SUBSCRIPTION: '@whoowes/demo_subscription',
 } as const;
 
+/** One payment reminder per person every 12 hours (the server enforces it too). */
+export const REMIND_COOLDOWN_MS = 12 * 60 * 60_000;
+
 export const QUERY_KEYS = {
   FRIENDS: ['friends'] as const,
   FRIEND_REQUESTS: ['friends', 'pending'] as const,

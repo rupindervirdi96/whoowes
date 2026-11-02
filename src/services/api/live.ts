@@ -12,6 +12,7 @@ import type {
   CreateSettlementPayload,
   Expense,
   Friend,
+  FriendPrefsPayload,
   Group,
   LoginPayload,
   ParsedReceipt,
@@ -60,6 +61,7 @@ export const LiveFriendService = {
   acceptFriendRequest: (_currentUserId: string, requestId: string) => post<Friend>(`/friends/requests/${requestId}/accept`),
   declineFriendRequest: (requestId: string) => post<void>(`/friends/requests/${requestId}/decline`),
   removeFriend: (_currentUserId: string, friendUserId: string) => del(`/friends/${friendUserId}`),
+  updateFriend: (friendUserId: string, prefs: FriendPrefsPayload) => patch<Friend>(`/friends/${friendUserId}`, prefs),
   searchUsers: (_currentUserId: string, query: string) => {
     const q = /^[\d\s()+-]{7,}$/.test(query.trim()) ? (toE164(query) ?? query) : query.trim();
     return get<User[]>('/users/search', { q });

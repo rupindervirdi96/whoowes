@@ -1,6 +1,7 @@
 import './global.css';
 import React, { useEffect } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { AppState, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
@@ -25,6 +26,15 @@ const queryClient = new QueryClient({
     queries: { retry: 1, staleTime: 60_000 },
   },
 });
+
+// On phones, "window focus" means the app coming back to the foreground: reload
+// anything stale then, so changes other people made while we were away show up.
+if (Platform.OS !== 'web') {
+  focusManager.setEventListener((setFocused) => {
+    const sub = AppState.addEventListener('change', (state) => setFocused(state === 'active'));
+    return () => sub.remove();
+  });
+}
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({

@@ -1,6 +1,9 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useQueryClient } from '@tanstack/react-query';
+import { QUERY_KEYS } from '../../constants';
+import { useRefreshOnFocus } from '../../hooks/queryUtils';
 import { useTheme } from '../../theme';
 import { useCurrentUser } from '../../hooks/useAuth';
 import { useBalances, useActivity } from '../../hooks/useBalances';
@@ -46,6 +49,11 @@ const HomeScreen: React.FC = () => {
   const { data: reminders = [] } = useReminders();
   const dismissReminder = useDismissReminder();
   const contacts = useContactMatches();
+  const queryClient = useQueryClient();
+
+  // Balances, activity, payments to confirm, friend requests and reminders.
+  const screenKeys = [QUERY_KEYS.BALANCES, QUERY_KEYS.EXPENSES, QUERY_KEYS.SETTLEMENTS, QUERY_KEYS.FRIENDS, QUERY_KEYS.REMINDERS];
+  useRefreshOnFocus(screenKeys);
 
   const totals = balancesQ.data?.totals ?? [];
   const balances = balancesQ.data?.balances ?? [];
@@ -60,8 +68,7 @@ const HomeScreen: React.FC = () => {
       edges={['top']}
       refreshing={balancesQ.isRefetching}
       onRefresh={() => {
-        balancesQ.refetch();
-        activity.refetch();
+        for (const queryKey of screenKeys) queryClient.refetchQueries({ queryKey: [...queryKey], type: 'active' });
       }}
     >
       {/* Header */}

@@ -7,9 +7,13 @@ import Icon from './Icon';
 interface ListRowProps {
   leading?: React.ReactNode;
   title: string;
+  /** Small things after the title (a pin, a tag). The title shortens to make room. */
+  titleAccessory?: React.ReactNode;
   subtitle?: string;
+  subtitleTone?: 'tertiary' | 'warning' | 'negative' | 'positive';
   trailing?: React.ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
   chevron?: boolean;
   /** Hairline under the row, inset to line up with the text. */
   divider?: boolean;
@@ -21,9 +25,12 @@ interface ListRowProps {
 const ListRow: React.FC<ListRowProps> = ({
   leading,
   title,
+  titleAccessory,
   subtitle,
+  subtitleTone = 'tertiary',
   trailing,
   onPress,
+  onLongPress,
   chevron,
   divider,
   style,
@@ -35,11 +42,20 @@ const ListRow: React.FC<ListRowProps> = ({
     <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, opacity: pressed ? 0.6 : 1 }, style]}>
       {leading}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text variant="bodyStrong" tone={titleTone} numberOfLines={1}>
-          {title}
-        </Text>
+        {titleAccessory ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text variant="bodyStrong" tone={titleTone} numberOfLines={1} style={{ flexShrink: 1 }}>
+              {title}
+            </Text>
+            {titleAccessory}
+          </View>
+        ) : (
+          <Text variant="bodyStrong" tone={titleTone} numberOfLines={1}>
+            {title}
+          </Text>
+        )}
         {subtitle ? (
-          <Text variant="caption" tone="tertiary" numberOfLines={1} style={{ marginTop: 3 }}>
+          <Text variant="caption" tone={subtitleTone} numberOfLines={1} style={{ marginTop: 3 }}>
             {subtitle}
           </Text>
         ) : null}
@@ -61,9 +77,9 @@ const ListRow: React.FC<ListRowProps> = ({
     </View>
   );
 
-  if (!onPress) return content();
+  if (!onPress && !onLongPress) return content();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress}>
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} onLongPress={onLongPress} delayLongPress={350}>
       {({ pressed }) => content(pressed)}
     </Pressable>
   );

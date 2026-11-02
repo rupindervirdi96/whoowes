@@ -1,12 +1,19 @@
-﻿import React, { useLayoutEffect } from 'react';
-import { View } from 'react-native';
+﻿import React, { useLayoutEffect, useState } from 'react';
+import { Pressable, View } from 'react-native';
 import { useTheme } from '../../theme';
 import { RootScreenProps } from '../../types/navigation';
 import { useCurrentUser } from '../../hooks/useAuth';
 import { useExpenses } from '../../hooks/useExpenses';
 import { useSettlements } from '../../hooks/useSettlements';
 import { useBalancesWith } from '../../hooks/useBalances';
-import { useFriends, useRemind, useRemoveFriend } from '../../hooks/useFriends';
+import { useFriends, useRemoveFriend } from '../../hooks/useFriends';
+import { useFriendTogether } from '../../hooks/useFriendInsights';
+import { remindedRecently, useFriendActions } from '../../hooks/useFriendActions';
+import { ageLabel, daysSince, openSince, STALE_AFTER_DAYS } from '../../utils/friendInsights';
+import { formatSmartDate, timeAgo } from '../../utils/date';
+import Icon from '../../components/ui/Icon';
+import TogetherCard from '../../components/friends/TogetherCard';
+import NicknameSheet from '../../components/friends/NicknameSheet';
 import { useShowModal } from '../../store/uiStore';
 import { useT } from '../../i18n';
 import { formatCurrency } from '../../utils/currency';
@@ -33,15 +40,15 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
   const expensesQ = useExpenses();
   const { data: settlements = [] } = useSettlements();
   const balances = useBalancesWith(friendId); // one per currency, main first
-  const remind = useRemind();
+  const actions = useFriendActions();
   const remove = useRemoveFriend();
   const showModal = useShowModal();
+  const { shared, turn, stats } = useFriendTogether(friendId);
+  const [editingNickname, setEditingNickname] = useState(false);
 
-  const shared = (expensesQ.data ?? []).filter(
-    (e) => e.paidBy === friendId || e.splits.some((s) => s.userId === friendId),
-  );
+  const friend = friends?.find((f) => f.friendId === friendId);
   const friendUser =
-    friends?.find((f) => f.friendId === friendId)?.friendUser ??
+    friend?.friendUser ??
     shared[0]?.splits.find((s) => s.userId === friendId)?.user ??
     settlements.find((s) => s.fromUserId === friendId)?.fromUser ??
     settlements.find((s) => s.toUserId === friendId)?.toUser;
@@ -53,20 +60,42 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
   const owedToMe = balances.filter((b) => b.netBalance > 0);
   const iOwe = balances.filter((b) => b.netBalance < 0);
   const settled = balances.length === 0;
+  const amounts = balances.map((b) => ({ currency: b.currency, amount: b.netBalance }));
+  const row = friend ? { friend, amounts, direction: 'settled' as const, since: null, stale: false } : null;
 
+  // How long the main balance has been open.
+  const main0 = balances[0];
+  const since = main0 ? openSince(expensesQ.data ?? [], settlements, me.id, friendId, main0.currency, main0.netBalance) : null;
+  const age = since ? ageLabel(since) : null;
+  const stale = !!since && daysSince(since) >= STALE_AFTER_DAYS;
+  const cooling = !!friend && remindedRecently(friend);
+
+  const pinned = !!friend?.pinned;
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <IconButton
-          icon="add"
-          variant="ghost"
-          size={40}
-          accessibilityLabel={tr('friend.addExpenseWith', { name: first })}
-          onPress={() => navigation.navigate('ManualExpense', { friendId })}
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {friend ? (
+            <IconButton
+              icon="push-pin"
+              variant={pinned ? 'soft' : 'ghost'}
+              size={40}
+              accessibilityLabel={pinned ? tr('friend.unpin', { name: first }) : tr('friend.pin', { name: first })}
+              onPress={() => actions.togglePin(friend)}
+            />
+          ) : null}
+          <IconButton
+            icon="add"
+            variant="ghost"
+            size={40}
+            accessibilityLabel={tr('friend.addExpenseWith', { name: first })}
+            onPress={() => navigation.navigate('ManualExpense', { friendId })}
+          />
+        </View>
       ),
     });
-  }, [navigation, first, friendId, tr]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, first, friendId, tr, pinned, friend]);
 
   const confirmRemove = () =>
     showModal({
@@ -92,6 +121,34 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
             <Text variant="caption" tone="tertiary" numberOfLines={1} style={{ marginTop: 2 }}>
               {friendUser.email || formatPhone(friendUser.phone!)}
             </Text>
+          ) : null}
+          {friend ? (
+            <Pressable
+              onPress={() => setEditingNickname(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={friend.nickname ? tr('friends.action.editNickname') : tr('friends.action.addNickname')}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                alignSelf: 'flex-start',
+                gap: 4,
+                marginTop: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 999,
+                backgroundColor: friend.nickname ? t.colors.surfaceAlt : 'transparent',
+                borderWidth: friend.nickname ? 0 : 1,
+                borderColor: t.colors.border,
+                borderStyle: 'dashed',
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Icon name={friend.nickname ? 'sell' : 'add'} size={13} color={t.colors.textSecondary} />
+              <Text variant="caption" tone="secondary" numberOfLines={1}>
+                {friend.nickname ?? tr('friends.action.addNickname')}
+              </Text>
+            </Pressable>
           ) : null}
         </View>
       </View>
@@ -127,17 +184,26 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
                 ))}
               </View>
             ) : null}
+            {since && age ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Icon name="schedule" size={14} color={stale ? t.colors.warning : t.colors.textTertiary} />
+                <Text variant="caption" tone={stale ? 'warning' : 'tertiary'}>
+                  {tr('friend.openSince', { date: formatSmartDate(since), age })}
+                </Text>
+              </View>
+            ) : null}
           </View>
         )}
         <View style={{ flexDirection: 'row', gap: 10, marginTop: t.spacing.lg }}>
           {owedToMe.length ? (
             <Button
-              title={tr('friend.remind')}
-              icon="notifications-active"
+              title={cooling ? tr('friend.reminded') : tr('friend.remind')}
+              icon={cooling ? 'check' : 'notifications-active'}
               variant="secondary"
               style={{ flex: 1 }}
-              loading={remind.isPending}
-              onPress={() => remind.mutate({ userId: friendId, name, amount: owedToMe[0].netBalance, currency: owedToMe[0].currency })}
+              loading={actions.remindPending}
+              disabled={cooling}
+              onPress={() => (row ? actions.remind(row) : undefined)}
             />
           ) : null}
           <Button
@@ -155,7 +221,19 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
             }
           />
         </View>
+        {owedToMe.length && friend?.lastRemindedAt ? (
+          <Text variant="caption" tone="tertiary" style={{ marginTop: 10, textAlign: 'center' }}>
+            {tr('friend.lastReminded', { when: timeAgo(friend.lastRemindedAt) })}
+          </Text>
+        ) : null}
       </Card>
+
+      {stats ? (
+        <>
+          <SectionHeader title={tr('friend.together', { name: first })} />
+          <TogetherCard name={first} turn={turn} stats={stats} friendsSince={friend?.friendsSince} />
+        </>
+      ) : null}
 
       <SectionHeader title={tr('friend.sharedExpenses')} />
       {expensesQ.isLoading ? (
@@ -184,6 +262,8 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
       {isFriend ? (
         <Button title={tr('friend.remove')} variant="ghost" icon="person-remove" onPress={confirmRemove} style={{ marginTop: t.spacing.xl }} />
       ) : null}
+
+      <NicknameSheet friend={editingNickname ? (friend ?? null) : null} onClose={() => setEditingNickname(false)} onSave={actions.setNickname} />
     </Screen>
   );
 };

@@ -47,6 +47,13 @@ export interface FriendshipDoc {
   status: 'pending' | 'accepted';
   createdAt: Date;
   respondedAt: Date | null;
+  /** Private to each person, keyed by their user id: what I call them, and whether I pinned them. */
+  prefs?: Record<string, FriendPrefs>;
+}
+
+export interface FriendPrefs {
+  nickname?: string | null;
+  pinned?: boolean;
 }
 
 export interface GroupMember {

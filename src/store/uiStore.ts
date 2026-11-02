@@ -3,7 +3,7 @@
  *
  * - Toasts and the global confirm modal
  * - The "add expense" action sheet opened by the center tab button
- * - Theme preference (persisted)
+ * - Theme preference and one-time tips (persisted)
  */
 
 import { create } from 'zustand';
@@ -32,6 +32,10 @@ interface UIStore {
 
   themePreference: ThemePreference;
   setThemePreference: (pref: ThemePreference) => void;
+
+  /** The "swipe a friend for quick actions" tip, shown until it's used or dismissed. */
+  friendSwipeTipSeen: boolean;
+  markFriendSwipeTipSeen: () => void;
 }
 
 export const useUIStore = create<UIStore>()(
@@ -56,11 +60,14 @@ export const useUIStore = create<UIStore>()(
 
       themePreference: 'system',
       setThemePreference: (themePreference) => set({ themePreference }),
+
+      friendSwipeTipSeen: false,
+      markFriendSwipeTipSeen: () => set({ friendSwipeTipSeen: true }),
     }),
     {
       name: STORAGE_KEYS.UI_PREFS,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ themePreference: s.themePreference }),
+      partialize: (s) => ({ themePreference: s.themePreference, friendSwipeTipSeen: s.friendSwipeTipSeen }),
     },
   ),
 );

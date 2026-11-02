@@ -12,6 +12,7 @@
  *   POST   /friends                     { userId } | { emailOrPhone }  → send a request
  *   POST   /friends/requests/:id/accept
  *   POST   /friends/requests/:id/decline   (addressee declines, or requester cancels)
+ *   PATCH  /friends/:userId              { nickname?, pinned? }  → private to me
  *   DELETE /friends/:userId
  *   POST   /friends/:userId/remind      { amount?, currency? }  → shows up in their "Needs your attention"
  *   GET    /reminders                   reminders sent to me in the last 14 days
@@ -49,8 +50,20 @@ peopleRouter.use(requireUser);
 
 const HOUR = 60 * 60_000;
 
+/** When I last reminded each of these people: Map<userId, Date>. */
+async function lastRemindedBy(me: string, userIds: string[]) {
+  if (!userIds.length) return new Map<string, Date>();
+  const rows = await db.reminders
+    .aggregate<{ _id: string; at: Date }>([
+      { $match: { fromUserId: me, toUserId: { $in: userIds } } },
+      { $group: { _id: '$toUserId', at: { $max: '$createdAt' } } },
+    ])
+    .toArray();
+  return new Map(rows.map((r) => [r._id, r.at]));
+}
+
 /** Friend rows from my point of view (matches the app's Friend type). */
-async function serializeFriendships(rows: FriendshipDoc[], me: string) {
+async function serializeFriendships(rows: FriendshipDoc[], me: string, reminded?: Map<string, Date>) {
   const users = await usersById(
     rows.flatMap((r) => [r.requesterId, r.addresseeId]),
     me,
@@ -61,7 +74,19 @@ async function serializeFriendships(rows: FriendshipDoc[], me: string) {
       return { id: r._id, userId: r.requesterId, friendId: me, friendUser: users.get(r.requesterId)!, status: r.status, createdAt: iso(r.createdAt)! };
     }
     const other = r.requesterId === me ? r.addresseeId : r.requesterId;
-    return { id: r._id, userId: me, friendId: other, friendUser: users.get(other)!, status: r.status, createdAt: iso(r.createdAt)! };
+    const prefs = r.prefs?.[me];
+    return {
+      id: r._id,
+      userId: me,
+      friendId: other,
+      friendUser: users.get(other)!,
+      status: r.status,
+      createdAt: iso(r.createdAt)!,
+      ...(r.respondedAt ? { friendsSince: iso(r.respondedAt)! } : {}),
+      ...(prefs?.nickname ? { nickname: prefs.nickname } : {}),
+      ...(prefs?.pinned ? { pinned: true } : {}),
+      ...(reminded?.get(other) ? { lastRemindedAt: iso(reminded.get(other)!)! } : {}),
+    };
   });
 }
 
@@ -206,7 +231,8 @@ peopleRouter.get(
   route(async (req, res) => {
     const me = req.user!.id;
     const rows = await db.friendships.find({ status: 'accepted', ...mine(me) }).toArray();
-    const list = await serializeFriendships(rows, me);
+    const others = rows.map((r) => (r.requesterId === me ? r.addresseeId : r.requesterId));
+    const list = await serializeFriendships(rows, me, await lastRemindedBy(me, others));
     res.json(list.sort((a, b) => a.friendUser.name.localeCompare(b.friendUser.name)));
   }),
 );
@@ -292,6 +318,31 @@ peopleRouter.post(
     const me = req.user!.id;
     await db.friendships.deleteOne({ _id: String(req.params.id), status: 'pending', ...mine(me) });
     res.status(204).end();
+  }),
+);
+
+peopleRouter.patch(
+  '/friends/:userId',
+  route(async (req, res) => {
+    const me = req.user!.id;
+    const other = String(req.params.userId);
+    const body = z
+      .object({
+        nickname: z.string().trim().max(30).nullable().optional(),
+        pinned: z.boolean().optional(),
+      })
+      .parse(req.body ?? {});
+    const set: Record<string, unknown> = {};
+    if (body.nickname !== undefined) set[`prefs.${me}.nickname`] = body.nickname || null;
+    if (body.pinned !== undefined) set[`prefs.${me}.pinned`] = body.pinned;
+    if (!Object.keys(set).length) fail(400, 'Nothing to change.');
+    const row = await db.friendships.findOneAndUpdate(
+      { pair: pairKey(me, other), status: 'accepted' },
+      { $set: set },
+      { returnDocument: 'after' },
+    );
+    if (!row) fail(404, 'You are not friends with this person.', 'not_found');
+    res.json((await serializeFriendships([row], me, await lastRemindedBy(me, [other])))[0]);
   }),
 );
 
