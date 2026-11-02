@@ -2,7 +2,7 @@
 import { View } from 'react-native';
 import { useTheme } from '../../theme';
 import { RootScreenProps } from '../../types/navigation';
-import { useGroup, useDeleteGroup, useAddGroupMember, useUpdateGroup } from '../../hooks/useGroups';
+import { useGroup, useDeleteGroup, useAddGroupMember, useUpdateGroup, useLeaveGroup, useRemoveGroupMember } from '../../hooks/useGroups';
 import { useExpenses } from '../../hooks/useExpenses';
 import { useFriends, useRemind } from '../../hooks/useFriends';
 import { useGroupBalances } from '../../hooks/useBalances';
@@ -47,6 +47,8 @@ const GroupDetailScreen: React.FC<RootScreenProps<'GroupDetail'>> = ({ route, na
   const balances = useGroupBalances(groupId);
   const { data: friends = [] } = useFriends();
   const deleteGroup = useDeleteGroup();
+  const leaveGroup = useLeaveGroup();
+  const removeMember = useRemoveGroupMember();
   const addMember = useAddGroupMember();
   const updateGroup = useUpdateGroup();
   const remind = useRemind();
@@ -54,28 +56,56 @@ const GroupDetailScreen: React.FC<RootScreenProps<'GroupDetail'>> = ({ route, na
   const openAddSheet = useUIStore((s) => s.openAddSheet);
   const group = groupQ.data;
 
+  const isAdmin = group?.members.find((m) => m.userId === me.id)?.role === 'admin';
+  // Money I still have open in this group, per currency.
+  const myOpen = (balances?.memberNets.find((m) => m.user.id === me.id)?.nets.length ?? 0) > 0;
+
+  const confirmLeave = () =>
+    showModal({
+      title: tr('group.leaveTitle', { name: group?.name ?? '' }),
+      body: myOpen ? tr('group.leaveBodyOpen') : tr('group.leaveBody'),
+      confirmLabel: tr('group.leaveConfirm'),
+      variant: 'danger',
+      onConfirm: () => leaveGroup.mutate({ groupId, name: group?.name ?? '' }, { onSuccess: () => navigation.goBack() }),
+    });
+
+  const confirmRemove = (userId: string, name: string) => {
+    const open = (balances?.memberNets.find((m) => m.user.id === userId)?.nets.length ?? 0) > 0;
+    showModal({
+      title: tr('group.removeTitle', { name: firstName(name) }),
+      body: open ? tr('group.removeBodyOpen', { name: firstName(name) }) : tr('group.removeBody', { name: firstName(name) }),
+      confirmLabel: tr('common.remove'),
+      variant: 'danger',
+      onConfirm: () => removeMember.mutate({ groupId, userId }),
+    });
+  };
+
   useLayoutEffect(() => {
     navigation.setOptions({
       title: '',
-      headerRight: () => (
-        <IconButton
-          icon="delete-outline"
-          variant="ghost"
-          size={40}
-          accessibilityLabel={tr('group.delete')}
-          onPress={() =>
-            showModal({
-              title: tr('group.deleteTitle'),
-              body: tr('group.deleteBody'),
-              confirmLabel: tr('common.delete'),
-              variant: 'danger',
-              onConfirm: () => deleteGroup.mutate(groupId, { onSuccess: () => navigation.goBack() }),
-            })
-          }
-        />
-      ),
+      headerRight: () =>
+        !group ? null : isAdmin ? (
+          <IconButton
+            icon="delete-outline"
+            variant="ghost"
+            size={40}
+            accessibilityLabel={tr('group.delete')}
+            onPress={() =>
+              showModal({
+                title: tr('group.deleteTitle'),
+                body: tr('group.deleteBody'),
+                confirmLabel: tr('common.delete'),
+                variant: 'danger',
+                onConfirm: () => deleteGroup.mutate(groupId, { onSuccess: () => navigation.goBack() }),
+              })
+            }
+          />
+        ) : (
+          <IconButton icon="logout" variant="ghost" size={40} accessibilityLabel={tr('group.leave')} onPress={confirmLeave} />
+        ),
     });
-  }, [navigation, group?.name, groupId, deleteGroup, showModal, tr]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, group?.name, groupId, isAdmin, myOpen, deleteGroup, showModal, tr]);
 
   if (groupQ.isLoading || !group) {
     return (
@@ -89,6 +119,7 @@ const GroupDetailScreen: React.FC<RootScreenProps<'GroupDetail'>> = ({ route, na
   const myNets = balances?.memberNets.find((m) => m.user.id === me.id)?.nets ?? [];
   const spend = group.totals?.length ? group.totals : [{ currency: groupCurrency, amount: group.totalExpenses }];
   const memberIds = new Set(group.members.map((m) => m.userId));
+  const friendIds = new Set(friends.map((f) => f.friendId));
   const addable = friends.filter((f) => !memberIds.has(f.friendId));
 
   return (
@@ -246,16 +277,33 @@ const GroupDetailScreen: React.FC<RootScreenProps<'GroupDetail'>> = ({ route, na
       {tab === 'members' ? (
         <>
           <ListCard style={{ marginTop: t.spacing.base }}>
-            {group.members.map((m, i) => (
-              <ListRow
-                key={m.userId}
-                divider={i < group.members.length - 1}
-                leading={<Avatar name={m.user.name} />}
-                title={m.userId === me.id ? tr('group.memberYou', { name: m.user.name }) : m.user.name}
-                subtitle={m.user.email || (m.user.phone ? formatPhone(m.user.phone) : undefined)}
-                trailing={m.role === 'admin' ? <Badge label={tr('group.admin')} tone="primary" /> : null}
-              />
-            ))}
+            {group.members.map((m, i) => {
+              const isMe = m.userId === me.id;
+              return (
+                <ListRow
+                  key={m.userId}
+                  divider={i < group.members.length - 1}
+                  leading={<Avatar name={m.user.name} />}
+                  title={isMe ? tr('group.memberYou', { name: m.user.name }) : m.user.name}
+                  subtitle={isMe ? m.user.email || (m.user.phone ? formatPhone(m.user.phone) : undefined) : friendIds.has(m.userId) ? undefined : tr('friend.notFriendHint')}
+                  onPress={isMe ? undefined : () => navigation.navigate('FriendDetail', { friendId: m.userId })}
+                  trailing={
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      {m.role === 'admin' ? <Badge label={tr('group.admin')} tone="primary" /> : null}
+                      {isAdmin && !isMe ? (
+                        <IconButton
+                          icon="person-remove"
+                          variant="ghost"
+                          size={34}
+                          accessibilityLabel={tr('group.removeMember', { name: m.user.name })}
+                          onPress={() => confirmRemove(m.userId, m.user.name)}
+                        />
+                      ) : null}
+                    </View>
+                  }
+                />
+              );
+            })}
           </ListCard>
           <Button title={tr('group.addPeople')} icon="person-add-alt" variant="secondary" fullWidth style={{ marginTop: 12 }} onPress={() => setAddOpen(true)} />
 
@@ -275,6 +323,7 @@ const GroupDetailScreen: React.FC<RootScreenProps<'GroupDetail'>> = ({ route, na
               onPress={() => setCurrencyOpen(true)}
             />
           </ListCard>
+          <Button title={tr('group.leave')} icon="logout" variant="ghost" fullWidth style={{ marginTop: t.spacing.xl }} onPress={confirmLeave} />
         </>
       ) : null}
 

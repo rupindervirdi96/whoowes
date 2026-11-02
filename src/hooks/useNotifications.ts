@@ -24,6 +24,9 @@ function refreshFor(queryClient: QueryClient, type: PushData['type'] | undefined
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.REMINDERS });
   } else if (type === 'added_to_group') {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.GROUPS });
+  } else if (type === 'member_left' || type === 'removed_from_group' || type === 'group_deleted') {
+    // Groups change, and so can which group an expense shows under.
+    invalidateMoney(queryClient);
   } else {
     invalidateMoney(queryClient);
   }
@@ -49,7 +52,13 @@ function openFor(data: Partial<PushData> | undefined) {
       if (data.userId) navigationRef.navigate('FriendDetail', { friendId: data.userId });
       break;
     case 'added_to_group':
+    case 'member_left':
       if (data.groupId) navigationRef.navigate('GroupDetail', { groupId: data.groupId });
+      break;
+    case 'removed_from_group':
+    case 'group_deleted':
+      // The group is gone for me: show my groups.
+      navigationRef.navigate('Main', { screen: 'Groups' });
       break;
   }
   return true;

@@ -4,7 +4,7 @@ import { QUERY_KEYS } from '../constants';
 import { CreateGroupPayload, UpdateGroupPayload } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { useShowToast } from '../store/uiStore';
-import type { MutationError } from './queryUtils';
+import { invalidateMoney, type MutationError } from './queryUtils';
 import { translate } from '../i18n';
 
 export function useGroups() {
@@ -77,6 +77,21 @@ export function useRemoveGroupMember() {
       showToast(translate('toast.removedFromGroup'), 'info');
     },
     onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotRemoveMember'), 'error'),
+  });
+}
+
+/** Leaves a group. Balances in it stay, and can still be settled. */
+export function useLeaveGroup() {
+  const queryClient = useQueryClient();
+  const showToast = useShowToast();
+  const userId = useAuthStore((s) => s.user?.id ?? '');
+  return useMutation({
+    mutationFn: ({ groupId }: { groupId: string; name: string }) => GroupService.removeMember(groupId, userId),
+    onSuccess: (_, v) => {
+      invalidateMoney(queryClient);
+      showToast(translate('toast.leftGroup', { name: v.name }), 'info');
+    },
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotUpdate'), 'error'),
   });
 }
 

@@ -28,7 +28,10 @@ export interface PushData {
     | 'payment_recorded'
     | 'payment_confirmed'
     | 'payment_declined'
-    | 'added_to_group';
+    | 'added_to_group'
+    | 'member_left'
+    | 'removed_from_group'
+    | 'group_deleted';
   expenseId?: string;
   settlementId?: string;
   groupId?: string;
