@@ -2,9 +2,10 @@
  * Runtime configuration.
  *
  * Set EXPO_PUBLIC_API_URL (see .env.example) to talk to the WhoOwes server in /server.
- * Without it the app runs fully offline on the mock data layer — including a
- * demo checkout that unlocks paid plans without charging anything.
+ * Without it the app runs fully offline on the mock data layer.
  */
+
+import { Platform } from 'react-native';
 
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/$/, '');
 
@@ -17,11 +18,11 @@ export const API_TIMEOUT_MS = 30_000;
 export const AI_TIMEOUT_MS = 90_000;
 
 /**
- * RevenueCat public SDK keys (Project settings → API keys). Not secret: they can
- * only start purchases. Set per platform to turn on store subscriptions there.
+ * AdMob rewarded ad unit ids (AdMob → Apps → Ad units), per platform. Not secret.
+ * Unset, or in development, Google's test ad is shown instead.
  */
-export const REVENUECAT_ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ?? '';
-export const REVENUECAT_IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? '';
+export const ADMOB_REWARDED_UNIT =
+  (Platform.OS === 'ios' ? process.env.EXPO_PUBLIC_ADMOB_REWARDED_IOS : process.env.EXPO_PUBLIC_ADMOB_REWARDED_ANDROID) ?? '';
 
 /** Where the privacy policy, terms and account deletion pages live (served by the server). */
 export const LEGAL_URLS = {
@@ -29,7 +30,7 @@ export const LEGAL_URLS = {
   terms: `${API_URL}/terms`,
 };
 
-/** Deep-link scheme registered in app.json — Stripe Checkout returns here. */
+/** Deep-link scheme registered in app.json. */
 export const APP_SCHEME = 'whoowes';
 
 /**

@@ -344,46 +344,10 @@ export type ActivityItem =
   | { kind: 'expense'; id: string; date: string; expense: Expense }
   | { kind: 'settlement'; id: string; date: string; settlement: Settlement };
 
-// ─── Billing / Plans ─────────────────────────────────────────────────────────
-
-export type PlanId = 'free' | 'plus' | 'pro';
-export type BillingInterval = 'month' | 'year';
-
-/** Features that can be gated behind a paid plan. */
-export type Feature =
-  | 'receipt_scan'
-  | 'ai_quick_add'
-  | 'ai_split_assistant'
-  | 'ai_insights'
-  | 'csv_export';
-
-export type SubscriptionStatus =
-  | 'none'
-  | 'trialing'
-  | 'active'
-  | 'past_due'
-  | 'canceled'
-  | 'incomplete';
-
-export interface Subscription {
-  plan: PlanId;
-  status: SubscriptionStatus;
-  interval?: BillingInterval;
-  currentPeriodEnd?: string;
-  cancelAtPeriodEnd?: boolean;
-  /** AI receipt scans used in the current calendar month. */
-  scansUsed: number;
-  /** null = unlimited */
-  scansLimit: number | null;
-  /** True when the app is running against the local mock (no real charges). */
-  isDemo?: boolean;
-  /** Who bills the subscription: Stripe (web) or an app store. */
-  provider?: 'stripe' | 'play_store' | 'app_store' | 'other_store';
-  /** App store product id of the current subscription (used to switch plans). */
-  productId?: string;
-}
-
 // ─── AI ──────────────────────────────────────────────────────────────────────
+
+/** The AI features. Each has a few free uses a month; then one per watched ad. */
+export type AIFeature = 'receipt_scan' | 'quick_add' | 'split_assistant' | 'insights';
 
 export interface QuickAddDraft {
   title: string;
@@ -430,10 +394,12 @@ export interface PaginatedResponse<T> {
 export interface ApiError {
   message: string;
   statusCode: number;
-  /** Machine-readable reason, e.g. 'upgrade_required' or 'quota_exceeded'. */
+  /** Machine-readable reason, e.g. 'ad_required' or 'ad_too_soon'. */
   code?: string;
-  /** For gating errors: which feature the user tried to use. */
-  feature?: Feature;
+  /** For AI pass errors: which feature the user tried to use. */
+  feature?: AIFeature;
+  /** Seconds to wait before trying again (an ad that hasn't run long enough). */
+  retryAfter?: number;
   errors?: Record<string, string[]>;
 }
 

@@ -9,7 +9,6 @@ import { createNativeStackNavigator, NativeStackNavigationOptions } from '@react
 import { StatusBar } from 'expo-status-bar';
 import { RootStackParamList } from '../types/navigation';
 import { useAuthStore } from '../store/authStore';
-import { useStoreIdentity } from '../hooks/useBilling';
 import { useEnsureCurrency } from '../hooks/useCurrency';
 import { navigationRef, usePushNotifications } from '../hooks/useNotifications';
 import { useT } from '../i18n';
@@ -31,7 +30,6 @@ import SettleUpScreen from '../screens/settlements/SettleUpScreen';
 import SettlementsScreen from '../screens/settlements/SettlementsScreen';
 import SettlementDetailScreen from '../screens/settlements/SettlementDetailScreen';
 import AccountScreen from '../screens/account/AccountScreen';
-import PlansScreen from '../screens/account/PlansScreen';
 import InsightsScreen from '../screens/insights/InsightsScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -40,7 +38,6 @@ const RootNavigator: React.FC = () => {
   const t = useTheme();
   const { t: tr } = useT();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  useStoreIdentity();
   useEnsureCurrency();
   const [navReady, setNavReady] = useState(false);
   usePushNotifications(navReady);
@@ -102,7 +99,6 @@ const RootNavigator: React.FC = () => {
               <Stack.Screen name="QuickAdd" component={QuickAddScreen} options={{ title: tr('nav.quickAdd') }} />
               <Stack.Screen name="ReceiptScan" component={ReceiptScanScreen} options={{ title: tr('nav.scanReceipt') }} />
               <Stack.Screen name="SettleUp" component={SettleUpScreen} options={{ title: tr('hero.settleUp') }} />
-              <Stack.Screen name="Plans" component={PlansScreen} options={{ headerShown: false }} />
             </Stack.Group>
           </>
         )}

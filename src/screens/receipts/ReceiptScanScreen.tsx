@@ -7,10 +7,10 @@ import { useTheme } from '../../theme';
 import { RootScreenProps } from '../../types/navigation';
 import { ReceiptSourceType } from '../../types';
 import { useScanReceipt } from '../../hooks/useReceipts';
-import { useEntitlements } from '../../hooks/useBilling';
+import { usePassFor } from '../../hooks/useAIPass';
 import { useShowToast } from '../../store/uiStore';
 import { MAX_FILE_SIZE_BYTES } from '../../constants';
-import { planName } from '../../billing/plans';
+import { formatShortDate } from '../../utils/date';
 import { useT, type TKey } from '../../i18n';
 import { USE_MOCK_API } from '../../config';
 import { prepareReceiptImage, stripDataUrl } from '../../utils/receiptImage';
@@ -39,7 +39,7 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
   const groupId = route.params?.groupId;
   const showToast = useShowToast();
   const scan = useScanReceipt();
-  const { plan, scansLeft, subscription } = useEntitlements();
+  const { pass, status } = usePassFor('receipt_scan');
   const [picked, setPicked] = useState<Picked | null>(null);
   const [instructions, setInstructions] = useState('');
   const [step, setStep] = useState(0);
@@ -132,25 +132,22 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
     );
   };
 
-  const outOfScans = scansLeft === 0;
-  const limit = subscription?.scansLimit;
+  // Out of free scans: reading still works, it just asks for an ad first.
+  const freeLeft = pass ? Math.max(0, pass.freeLimit - pass.freeUsed) : null;
+  const needsAd = !!pass && pass.available <= 0;
 
   return (
     <Screen
       footer={
         picked ? (
-          outOfScans ? (
-            <Button title={tr('scan.getMore')} variant="pro" size="lg" fullWidth onPress={() => navigation.navigate('Plans', { feature: 'receipt_scan' })} />
-          ) : (
-            <Button
-              title={preparing ? tr('scan.preparing') : scan.isPending ? tr(STEPS[step]) : tr('scan.read')}
-              icon="auto-awesome"
-              size="lg"
-              fullWidth
-              loading={preparing || scan.isPending}
-              onPress={read}
-            />
-          )
+          <Button
+            title={preparing ? tr('scan.preparing') : scan.isPending ? tr(STEPS[step]) : needsAd ? tr('scan.readWithAd') : tr('scan.read')}
+            icon={needsAd ? 'play-circle-outline' : 'auto-awesome'}
+            size="lg"
+            fullWidth
+            loading={preparing || scan.isPending}
+            onPress={read}
+          />
         ) : undefined
       }
     >
@@ -163,20 +160,22 @@ const ReceiptScanScreen: React.FC<RootScreenProps<'ReceiptScan'>> = ({ route, na
         </Card>
       ) : null}
 
-      {plan !== 'pro' && limit != null ? (
-        <Pressable onPress={() => navigation.navigate('Plans', { feature: 'receipt_scan' })} accessibilityRole="button">
-          <Card variant="alt" padding={12} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: t.spacing.base }}>
-            <Icon name="document-scanner" size={20} color={outOfScans ? t.colors.negative : t.colors.primary} />
-            <Text variant="label" style={{ flex: 1 }} tone={outOfScans ? 'negative' : 'default'}>
-              {outOfScans
-                ? tr('scan.usedAll', { limit, plan: planName(plan) })
-                : tr('scan.left', { left: scansLeft, limit })}
+      {pass && status ? (
+        <Card variant="alt" padding={12} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: t.spacing.base }}>
+          <Icon name={needsAd ? 'play-circle-outline' : 'document-scanner'} size={20} color={t.colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text variant="label">
+              {freeLeft
+                ? tr('scan.freeLeft', { left: freeLeft, limit: pass.freeLimit })
+                : pass.unlocked > 0
+                  ? tr('pass.unlockedLeft', { count: pass.unlocked })
+                  : tr('scan.adForNext')}
             </Text>
-            <Text variant="label" tone="primary">
-              {plan === 'free' ? tr('scan.upgrade') : tr('scan.goUnlimited')}
+            <Text variant="caption" tone="tertiary" style={{ marginTop: 2 }}>
+              {tr('pass.resets', { date: formatShortDate(status.resetsAt) })}
             </Text>
-          </Card>
-        </Pressable>
+          </View>
+        </Card>
       ) : null}
 
       {!picked ? (

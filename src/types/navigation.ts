@@ -7,7 +7,7 @@
 
 import { NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { Feature, QuickAddDraft } from './index';
+import type { QuickAddDraft } from './index';
 
 export type AuthStackParamList = {
   Welcome: undefined;
@@ -47,9 +47,8 @@ export type RootStackParamList = {
   Settlements: undefined;
   SettlementDetail: { settlementId: string };
 
-  // Account & billing
+  // Account
   Account: undefined;
-  Plans: { feature?: Feature } | undefined;
   Insights: undefined;
 };
 

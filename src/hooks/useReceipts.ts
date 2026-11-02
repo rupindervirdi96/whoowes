@@ -4,7 +4,7 @@ import type { ReceiptFile } from '../services';
 import { QUERY_KEYS } from '../constants';
 import { ParsedReceipt, ReceiptSourceType } from '../types';
 import { useShowToast } from '../store/uiStore';
-import { useHandlePaywallError } from './useBilling';
+import { isAdCancelled, runWithPass } from './useAIPass';
 import type { MutationError } from './queryUtils';
 import { translate } from '../i18n';
 
@@ -20,7 +20,6 @@ export function useReceipt(receiptId: string) {
 export function useScanReceipt() {
   const queryClient = useQueryClient();
   const showToast = useShowToast();
-  const handlePaywall = useHandlePaywallError();
   return useMutation({
     mutationFn: (input: {
       file: ReceiptFile;
@@ -28,13 +27,12 @@ export function useScanReceipt() {
       fileName?: string;
       sourceType: ReceiptSourceType;
       instructions?: string;
-    }) => ReceiptService.scanReceipt(input),
+    }) => runWithPass(queryClient, 'receipt_scan', () => ReceiptService.scanReceipt(input)),
     onSuccess: (receipt) => {
       queryClient.setQueryData(QUERY_KEYS.RECEIPT(receipt.id), receipt);
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SUBSCRIPTION }); // scan count changed
     },
     onError: (e: MutationError) => {
-      if (!handlePaywall(e)) showToast(e.message ?? translate('toast.couldNotReadReceipt'), 'error');
+      if (!isAdCancelled(e)) showToast(e.message ?? translate('toast.couldNotReadReceipt'), 'error');
     },
   });
 }

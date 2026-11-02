@@ -1,19 +1,16 @@
 /**
  * AI features: receipt reading, Quick Add, Split Assistant and spending insights.
  *
- * Live mode calls the WhoOwes server, which runs Claude and enforces plans and
- * quotas. Demo mode uses small local heuristics so every flow is clickable
- * offline — and applies the same plan gates, so the paywall behaves the same.
+ * Live mode calls the WhoOwes server, which runs Claude and counts each use
+ * against the user's monthly AI pass (free uses, then one per watched ad).
+ * Demo mode uses small local heuristics and the same pass rules, offline.
  */
 
 import { USE_MOCK_API, AI_TIMEOUT_MS } from '../config';
 import { categoryLabel } from '../constants';
 import { MOCK_PARSED_RECEIPT } from '../constants/sampleData';
-import { PLANS, planIncludes } from '../billing/plans';
 import type {
-  ApiError,
   ExpenseCategory,
-  Feature,
   Group,
   ParsedReceipt,
   QuickAddDraft,
@@ -22,7 +19,7 @@ import type {
   User,
 } from '../types';
 import apiClient from './api/apiClient';
-import { BillingService } from './billing';
+import { takeDemoPass } from './aiPass';
 import { mockDelay } from './mock/mockHelpers';
 import { generateId } from '../utils/idGenerator';
 import { formatCurrency, roundToCents } from '../utils/currency';
@@ -53,30 +50,6 @@ export interface MonthStats {
   topPeople: Array<{ name: string; amount: number }>;
   biggest: Array<{ title: string; amount: number; category: ExpenseCategory }>;
   count: number;
-}
-
-// ─── Demo-mode gating (the server does this in live mode) ─────────────────────
-
-async function assertFeature(feature: Feature) {
-  const sub = await BillingService.getSubscription();
-  if (!planIncludes(sub.plan, feature)) {
-    const err: ApiError = {
-      statusCode: 402,
-      code: 'upgrade_required',
-      feature,
-      message: translate('billing.needsUpgrade'),
-    };
-    throw err;
-  }
-  if (feature === 'receipt_scan' && sub.scansLimit !== null && sub.scansUsed >= sub.scansLimit) {
-    const err: ApiError = {
-      statusCode: 402,
-      code: 'quota_exceeded',
-      feature,
-      message: translate('billing.scansUsedUp', { limit: sub.scansLimit, plan: PLANS[sub.plan].name }),
-    };
-    throw err;
-  }
 }
 
 // ─── Demo heuristics ──────────────────────────────────────────────────────────
@@ -179,9 +152,8 @@ export const AIService = {
     meta?: { sourceType?: string; fileName?: string },
   ): Promise<ParsedReceipt & { receiptId?: string }> {
     if (USE_MOCK_API) {
-      await assertFeature('receipt_scan');
+      takeDemoPass('receipt_scan');
       await mockDelay(1800);
-      await BillingService.recordDemoScan();
       return {
         ...MOCK_PARSED_RECEIPT,
         items: MOCK_PARSED_RECEIPT.items.map((i) => ({ ...i, id: generateId() })),
@@ -198,7 +170,7 @@ export const AIService = {
 
   async quickAdd(text: string, ctx: QuickAddContext): Promise<QuickAddDraft> {
     if (USE_MOCK_API) {
-      await assertFeature('ai_quick_add');
+      takeDemoPass('quick_add');
       await mockDelay(900);
       return demoQuickAdd(text, ctx);
     }
@@ -219,7 +191,7 @@ export const AIService = {
 
   async assignItems(items: ReceiptItem[], people: User[], instruction: string): Promise<ReceiptItem[]> {
     if (USE_MOCK_API) {
-      await assertFeature('ai_split_assistant');
+      takeDemoPass('split_assistant');
       await mockDelay(1100);
       return demoAssign(items, people, instruction);
     }
@@ -236,7 +208,11 @@ export const AIService = {
     return items.map((i) => ({ ...i, assignedTo: byId.get(i.id) ?? i.assignedTo }));
   },
 
-  async insights(stats: MonthStats): Promise<SpendingInsights> {
+  /**
+   * The AI write-up for a month. `cachedOnly` asks for one written earlier
+   * (free, null if there isn't one); otherwise a new one uses an insights pass.
+   */
+  async insights(stats: MonthStats, opts: { cachedOnly?: boolean } = {}): Promise<SpendingInsights | null> {
     const base = {
       month: stats.month,
       currency: stats.currency,
@@ -245,16 +221,17 @@ export const AIService = {
       byCategory: stats.byCategory,
     };
     if (USE_MOCK_API) {
-      await assertFeature('ai_insights');
+      if (opts.cachedOnly) return null;
+      takeDemoPass('insights');
       await mockDelay(1200);
       return { ...base, ...demoInsights(stats) };
     }
-    const res = await apiClient.post<Pick<SpendingInsights, 'headline' | 'highlights' | 'tips'>>(
+    const res = await apiClient.post<Pick<SpendingInsights, 'headline' | 'highlights' | 'tips'> | null>(
       '/ai/insights',
-      { stats: { ...stats, currencies: undefined, total: roundToCents(stats.total) } },
+      { stats: { ...stats, currencies: undefined, total: roundToCents(stats.total) }, cachedOnly: opts.cachedOnly },
       { timeout: AI_TIMEOUT_MS },
     );
-    return { ...base, ...res.data };
+    return res.data ? { ...base, ...res.data } : null;
   },
 };
 

@@ -15,6 +15,7 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import RootNavigator from './src/navigation';
 import ToastContainer from './src/components/ui/ToastContainer';
+import AdGateSheet from './src/components/AdGateSheet';
 import ConfirmModal from './src/components/ui/ConfirmModal';
 import { ThemeProvider } from './src/theme';
 import { useAuthStore } from './src/store/authStore';
@@ -59,6 +60,7 @@ export default function App() {
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
             <RootNavigator />
+            <AdGateSheet />
             <ToastContainer />
             <ConfirmModal />
           </ThemeProvider>

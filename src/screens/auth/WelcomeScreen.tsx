@@ -92,7 +92,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
                   {tRich('welcome.agree', {
                     terms: (
                       <Text key="terms" variant="caption" weight="bold" tone="secondary" onPress={() => Linking.openURL(LEGAL_URLS.terms)} accessibilityRole="link">
-                        {tr('plans.terms')}
+                        {tr('legal.termsShort')}
                       </Text>
                     ),
                     privacy: (

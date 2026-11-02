@@ -4,7 +4,6 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../theme';
 import { useActivity } from '../../hooks/useBalances';
 import { useCurrentUser } from '../../hooks/useAuth';
-import { useFeatureGate } from '../../hooks/useBilling';
 import { ActivityItem } from '../../types';
 import { formatMonthYear } from '../../utils/date';
 import { expensesToCsv } from '../../utils/csv';
@@ -29,7 +28,6 @@ const ActivityScreen: React.FC = () => {
   const navigation = useNavigation();
   const me = useCurrentUser()!;
   const activity = useActivity();
-  const gate = useFeatureGate();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
 
@@ -63,7 +61,6 @@ const ActivityScreen: React.FC = () => {
   }, [activity.items, search, filter]);
 
   const exportCsv = () => {
-    if (!gate('csv_export')) return;
     const expenses = activity.items.flatMap((i) => (i.kind === 'expense' ? [i.expense] : []));
     Share.share({ title: tr('activity.exportTitle'), message: expensesToCsv(expenses, me.id) });
   };

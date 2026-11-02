@@ -12,7 +12,6 @@ export const STORAGE_KEYS = {
   AUTH_TOKEN: '@whoowes/auth_token',
   USER: '@whoowes/user',
   UI_PREFS: '@whoowes/ui',
-  DEMO_SUBSCRIPTION: '@whoowes/demo_subscription',
 } as const;
 
 /** One payment reminder per person every 12 hours (the server enforces it too). */
@@ -31,7 +30,8 @@ export const QUERY_KEYS = {
   PENDING_SETTLEMENTS: ['settlements', 'pending'] as const,
   SETTLEMENT: (id: string) => ['settlements', 'detail', id] as const,
   BALANCES: ['balances'] as const,
-  SUBSCRIPTION: ['billing', 'subscription'] as const,
+  /** What's left of each AI feature this month. */
+  AI_PASS: ['ai', 'pass'] as const,
   INSIGHTS: (month: string) => ['insights', month] as const,
   CONTACT_MATCHES: ['contacts', 'matches'] as const,
   REMINDERS: ['reminders'] as const,

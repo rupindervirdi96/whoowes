@@ -1,18 +1,17 @@
 /**
  * The action sheet behind the center "+" tab button. Lists every way to add
- * money to WhoOwes, with the AI options tagged by plan.
+ * money to WhoOwes, with the AI options showing what's left of this month's pass.
  */
 
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useUIStore } from '../store/uiStore';
-import { useEntitlements } from '../hooks/useBilling';
 import { useTheme } from '../theme';
 import BottomSheet from './ui/BottomSheet';
 import Text from './ui/Text';
 import Icon from './ui/Icon';
-import { PlanTag } from './ui/Badge';
+import PassTag from './PassTag';
 import { useT } from '../i18n';
 
 interface Option {
@@ -32,7 +31,6 @@ const AddSheet: React.FC = () => {
   const open = useUIStore((s) => s.addSheetOpen);
   const groupId = useUIStore((s) => s.addSheetGroupId);
   const close = useUIStore((s) => s.closeAddSheet);
-  const { can, scansLeft, plan } = useEntitlements();
 
   const go = (fn: () => void) => {
     close();
@@ -40,20 +38,13 @@ const AddSheet: React.FC = () => {
     setTimeout(fn, 120);
   };
 
-  const scanTag =
-    plan === 'pro' ? null : (
-      <Text variant="caption" tone={scansLeft > 0 ? 'tertiary' : 'negative'}>
-        {scansLeft === Infinity ? '' : tr('add.scansLeft', { count: scansLeft })}
-      </Text>
-    );
-
   const options: Option[] = [
     {
       key: 'scan',
       icon: 'document-scanner',
       title: tr('add.scan.title'),
       body: tr('add.scan.body'),
-      tag: scanTag,
+      tag: <PassTag feature="receipt_scan" />,
       tint: 'primary',
       onPress: () => go(() => navigation.navigate('ReceiptScan', { groupId })),
     },
@@ -62,10 +53,9 @@ const AddSheet: React.FC = () => {
       icon: 'bolt',
       title: tr('add.quick.title'),
       body: tr('add.quick.body'),
-      tag: can('ai_quick_add') ? null : <PlanTag plan="plus" />,
+      tag: <PassTag feature="quick_add" />,
       tint: 'accent',
-      onPress: () =>
-        go(() => (can('ai_quick_add') ? navigation.navigate('QuickAdd', { groupId }) : navigation.navigate('Plans', { feature: 'ai_quick_add' }))),
+      onPress: () => go(() => navigation.navigate('QuickAdd', { groupId })),
     },
     {
       key: 'manual',

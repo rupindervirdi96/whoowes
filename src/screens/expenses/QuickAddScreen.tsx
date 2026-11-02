@@ -8,7 +8,6 @@ import { useFriends } from '../../hooks/useFriends';
 import { useGroups } from '../../hooks/useGroups';
 import { useCreateExpense } from '../../hooks/useExpenses';
 import { useQuickAdd } from '../../hooks/useAI';
-import { useEntitlements } from '../../hooks/useBilling';
 import { calculateSplit } from '../../utils/splitEngine';
 import { currencyDecimals, formatCurrency } from '../../utils/currency';
 import { firstName } from '../../utils/money';
@@ -23,7 +22,7 @@ import Chip from '../../components/ui/Chip';
 import Avatar from '../../components/ui/Avatar';
 import Icon from '../../components/ui/Icon';
 import CategoryIcon from '../../components/ui/CategoryIcon';
-import { PlanTag } from '../../components/ui/Badge';
+import PassTag from '../../components/PassTag';
 
 const EXAMPLES: TKey[] = ['quickAdd.example1', 'quickAdd.example2', 'quickAdd.example3', 'quickAdd.example4'];
 
@@ -34,7 +33,6 @@ const QuickAddScreen: React.FC<RootScreenProps<'QuickAdd'>> = ({ route, navigati
   const myCurrency = useMyCurrency();
   const { data: friends = [] } = useFriends();
   const { data: groups = [] } = useGroups();
-  const { can } = useEntitlements();
   const quickAdd = useQuickAdd();
   const create = useCreateExpense();
   const [text, setText] = useState('');
@@ -94,26 +92,6 @@ const QuickAddScreen: React.FC<RootScreenProps<'QuickAdd'>> = ({ route, navigati
     );
   };
 
-  if (!can('ai_quick_add')) {
-    return (
-      <Screen>
-        <View style={{ alignItems: 'center', paddingTop: t.spacing['2xl'] }}>
-          <View style={{ width: 72, height: 72, borderRadius: 24, backgroundColor: t.brand.ink, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="bolt" size={36} color={t.brand.citrus} />
-          </View>
-          <Text variant="h2" align="center" style={{ marginTop: t.spacing.base }}>
-            {tr('quickAdd.locked.title')}
-          </Text>
-          <Text tone="secondary" align="center" style={{ marginTop: 8, maxWidth: 300 }}>
-            {tr('quickAdd.locked.body')}
-          </Text>
-          <PlanTag plan="plus" style={{ alignSelf: 'center', marginTop: 12 }} />
-          <Button title={tr('common.seePlans')} variant="pro" size="lg" style={{ marginTop: t.spacing.xl }} onPress={() => navigation.replace('Plans', { feature: 'ai_quick_add' })} />
-        </View>
-      </Screen>
-    );
-  }
-
   return (
     <Screen
       footer={
@@ -132,7 +110,10 @@ const QuickAddScreen: React.FC<RootScreenProps<'QuickAdd'>> = ({ route, navigati
         )
       }
     >
-      <Text variant="h2">{tr('quickAdd.title')}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <Text variant="h2">{tr('quickAdd.title')}</Text>
+        <PassTag feature="quick_add" />
+      </View>
       <Text tone="secondary" style={{ marginTop: 4, marginBottom: t.spacing.base }}>
         {tr('quickAdd.subtitle')}
       </Text>

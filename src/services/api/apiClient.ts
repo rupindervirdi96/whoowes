@@ -39,6 +39,7 @@ apiClient.interceptors.response.use(
       if (typeof data.message === 'string') apiError.message = data.message;
       if (typeof data.code === 'string') apiError.code = data.code;
       if (typeof data.feature === 'string') apiError.feature = data.feature as ApiError['feature'];
+      if (typeof data.retryAfter === 'number') apiError.retryAfter = data.retryAfter;
     } else if (error.code === 'ECONNABORTED') {
       apiError.message = translate('error.timeout');
     } else if (!error.response) {

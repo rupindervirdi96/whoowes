@@ -4,9 +4,8 @@ import { useTheme } from '../../theme';
 import { RootScreenProps } from '../../types/navigation';
 import { useCurrentUser, useDeleteAccount, useLogout, useUpdateProfile } from '../../hooks/useAuth';
 import { formatPhone } from '../../utils/phone';
-import { useEntitlements, useManageSubscription, useResetDemoPlan } from '../../hooks/useBilling';
 import { useShowModal, useUIStore, ThemePreference } from '../../store/uiStore';
-import { planName } from '../../billing/plans';
+import AIPassCard from '../../components/AIPassCard';
 import { LANGUAGES, deviceLanguage, useLanguageStore, useT } from '../../i18n';
 import { useMyCurrency, useSetMyCurrency } from '../../hooks/useCurrency';
 import { currencyName } from '../../utils/currency';
@@ -43,22 +42,14 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
   const showModal = useShowModal();
   const themePref = useUIStore((s) => s.themePreference);
   const setThemePref = useUIStore((s) => s.setThemePreference);
-  const { plan, subscription, isPaid } = useEntitlements();
-  const manage = useManageSubscription();
-  const resetDemo = useResetDemoPlan();
 
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email ?? '');
 
-  const storeBilled = !!subscription?.provider && subscription.provider !== 'stripe';
-  const storeName = subscription?.provider === 'app_store' ? tr('store.appStore') : tr('store.googlePlay');
-  const currentPlan = planName(plan);
   const languageLabel = languagePref === 'system'
     ? tr('account.languageSystem', { language: LANGUAGES.find((l) => l.code === deviceLanguage())!.native })
     : LANGUAGES.find((l) => l.code === languagePref)!.native;
-  const used = subscription?.scansUsed ?? 0;
-  const limit = subscription?.scansLimit;
 
   return (
     <Screen>
@@ -71,78 +62,8 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
         <Button title={tr('account.editProfile')} icon="edit" variant="ghost" size="sm" onPress={() => setEditing(true)} style={{ marginTop: 6 }} />
       </View>
 
-      {/* Plan */}
-      <Card style={{ borderWidth: 1.5, borderColor: isPaid ? t.colors.pro : t.colors.border }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: isPaid ? t.colors.proSoft : t.colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name={isPaid ? 'workspace-premium' : 'star-outline'} size={24} color={isPaid ? t.colors.pro : t.colors.textSecondary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text variant="overline" tone="tertiary">
-              {tr('account.yourPlan')}
-            </Text>
-            <Text variant="h3">WhoOwes {currentPlan}</Text>
-          </View>
-          {subscription?.isDemo ? <Badge label={tr('account.demo')} tone="info" /> : null}
-        </View>
-
-        {subscription?.status === 'past_due' ? (
-          <Text variant="caption" tone="negative" style={{ marginTop: 10 }}>
-            {storeBilled
-              ? tr('account.pastDueStore', { store: storeName, plan: currentPlan })
-              : tr('account.pastDueCard', { plan: currentPlan })}
-          </Text>
-        ) : null}
-        {isPaid && subscription?.currentPeriodEnd ? (
-          <Text variant="caption" tone="tertiary" style={{ marginTop: 10 }}>
-            {tr(subscription.cancelAtPeriodEnd ? 'account.ends' : subscription.status === 'trialing' ? 'account.trialEnds' : 'account.renews', {
-              date: formatShortDate(subscription.currentPeriodEnd),
-            })}
-            {subscription.interval ? ` · ${tr(subscription.interval === 'year' ? 'account.billedYearly' : 'account.billedMonthly')}` : ''}
-          </Text>
-        ) : null}
-
-        <View style={{ marginTop: 14 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-            <Text variant="caption" tone="secondary">
-              {tr('account.scansThisMonth')}
-            </Text>
-            <Text variant="caption" weight="bold">
-              {limit == null ? `${used} · ${tr('account.unlimited')}` : `${used} / ${limit}`}
-            </Text>
-          </View>
-          <View style={{ height: 6, borderRadius: 3, backgroundColor: t.colors.surfaceAlt, overflow: 'hidden' }}>
-            <View
-              style={{
-                height: 6,
-                width: limit == null ? '100%' : `${Math.min(100, (used / Math.max(limit, 1)) * 100)}%`,
-                backgroundColor: limit != null && used >= limit ? t.colors.negative : t.colors.primary,
-                opacity: limit == null ? 0.35 : 1,
-              }}
-            />
-          </View>
-        </View>
-
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: t.spacing.base }}>
-          {plan !== 'pro' ? <Button title={isPaid ? tr('account.upgradePro') : tr('common.seePlans')} variant="pro" style={{ flex: 1 }} onPress={() => navigation.navigate('Plans')} /> : null}
-          {isPaid ? (
-            <Button
-              title={
-                subscription?.isDemo
-                  ? tr(subscription.cancelAtPeriodEnd ? 'account.resume' : 'common.cancel')
-                  : tr(storeBilled ? 'account.manageSubscription' : 'account.manageBilling')
-              }
-              variant="secondary"
-              style={{ flex: 1 }}
-              loading={manage.isPending}
-              onPress={() => manage.mutate()}
-            />
-          ) : null}
-        </View>
-        {subscription?.isDemo && isPaid ? (
-          <Button title={tr('account.resetDemo')} variant="ghost" size="sm" onPress={() => resetDemo.mutate()} style={{ marginTop: 6 }} />
-        ) : null}
-      </Card>
+      {/* AI uses this month */}
+      <AIPassCard />
 
       <SectionHeader title={tr('account.preferences')} />
       <Card padding={4} style={{ paddingHorizontal: 12 }}>
@@ -233,9 +154,7 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
         onPress={() =>
           showModal({
             title: tr('account.deleteTitle'),
-            body:
-              (storeBilled && isPaid ? tr('account.deleteStoreFirst', { store: storeName }) + ' ' : '') +
-              tr(storeBilled ? 'account.deleteBodyStore' : 'account.deleteBody'),
+            body: tr('account.deleteBody'),
             confirmLabel: tr('account.delete'),
             variant: 'danger',
             onConfirm: () => deleteAccount.mutate(),

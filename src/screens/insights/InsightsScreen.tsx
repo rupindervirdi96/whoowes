@@ -1,6 +1,6 @@
 /**
- * Spending insights. Numbers are computed on-device for every plan; Pro adds an
- * AI-written read-out. Charts follow the dataviz rules: one fixed color per
+ * Spending insights. Numbers are computed on-device, always free; the AI-written
+ * read-out is written on request and uses an insights pass (looking at it again is free). Charts follow the dataviz rules: one fixed color per
  * category, every bar directly labeled with name + value (never color alone),
  * thin 4px-rounded bars, 2px gaps between stacked segments.
  *
@@ -26,7 +26,7 @@ import Button from '../../components/ui/Button';
 import Chip from '../../components/ui/Chip';
 import Skeleton from '../../components/ui/Skeleton';
 import Avatar from '../../components/ui/Avatar';
-import { PlanTag } from '../../components/ui/Badge';
+import PassTag from '../../components/PassTag';
 import ListRow, { SectionHeader } from '../../components/ui/ListRow';
 import EmptyState from '../../components/ui/EmptyState';
 import { categoryColor } from '../../components/ui/CategoryIcon';
@@ -37,7 +37,7 @@ const InsightsScreen: React.FC<RootScreenProps<'Insights'>> = ({ navigation }) =
   const thisMonth = monthKey(new Date());
   const [month, setMonth] = useState(thisMonth);
   const [currency, setCurrency] = useState<string>();
-  const { stats, narrative, aiEnabled } = useMonthInsights(month, currency);
+  const { stats, narrative, write } = useMonthInsights(month, currency);
 
   const delta = stats && stats.previousTotal > 0 ? (stats.total - stats.previousTotal) / stats.previousTotal : null;
   const max = Math.max(...(stats?.byCategory.map((c) => c.amount) ?? [0]), 1);
@@ -110,8 +110,7 @@ const InsightsScreen: React.FC<RootScreenProps<'Insights'>> = ({ navigation }) =
 
           {/* AI read-out */}
           <SectionHeader title={tr('insights.readout')} />
-          {aiEnabled ? (
-            narrative.isLoading ? (
+          {narrative.isLoading || write.isPending ? (
               <Card style={{ gap: 10 }}>
                 <Skeleton width="80%" height={18} />
                 <Skeleton width="95%" />
@@ -147,31 +146,26 @@ const InsightsScreen: React.FC<RootScreenProps<'Insights'>> = ({ navigation }) =
                   </View>
                 ) : null}
               </Card>
-            ) : (
+            ) : narrative.isError ? (
               <Card variant="alt">
                 <Text tone="secondary">{tr('insights.couldNotLoad')}</Text>
                 <Button title={tr('common.tryAgain')} size="sm" variant="secondary" style={{ marginTop: 10, alignSelf: 'flex-start' }} onPress={() => narrative.refetch()} />
               </Card>
-            )
-          ) : (
-            <Card variant="alt">
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text variant="bodyStrong" style={{ flex: 1 }}>
-                  {tr('insights.locked.title')}
+            ) : (
+              // Not written yet for this month: write it when asked (uses an insights pass).
+              <Card variant="alt">
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Icon name="auto-awesome" size={18} color={t.colors.primary} />
+                  <Text variant="bodyStrong" style={{ flex: 1 }}>
+                    {tr('insights.write.title', { month: monthLabel(month) })}
+                  </Text>
+                  <PassTag feature="insights" />
+                </View>
+                <Text tone="secondary" style={{ marginTop: 6 }}>
+                  {tr('insights.write.body')}
                 </Text>
-                <PlanTag plan="pro" />
-              </View>
-              <Text tone="secondary" style={{ marginTop: 6 }}>
-                {tr('insights.locked.body')}
-              </Text>
-              <Button
-                title={tr('insights.unlock')}
-                variant="pro"
-                size="sm"
-                style={{ marginTop: 12, alignSelf: 'flex-start' }}
-                onPress={() => navigation.navigate('Plans', { feature: 'ai_insights' })}
-              />
-            </Card>
+                <Button title={tr('insights.write.button')} icon="auto-awesome" size="sm" style={{ marginTop: 12, alignSelf: 'flex-start' }} onPress={() => write.mutate()} />
+              </Card>
           )}
 
           {/* Category bars — sorted by amount, each directly labeled */}

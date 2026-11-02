@@ -51,8 +51,4 @@ const Badge: React.FC<BadgeProps> = ({ label, tone = 'neutral', icon, style }) =
 };
 
 /** Gold "PLUS"/"PRO" tag shown next to paid features. */
-export const PlanTag: React.FC<{ plan?: 'plus' | 'pro'; style?: StyleProp<ViewStyle> }> = ({ plan = 'pro', style }) => (
-  <Badge label={plan === 'pro' ? 'PRO' : 'PLUS'} tone="pro" icon="auto-awesome" style={style} />
-);
-
 export default Badge;

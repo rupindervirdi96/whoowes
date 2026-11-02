@@ -9,7 +9,6 @@ import { useFriends } from '../../hooks/useFriends';
 import { useGroup } from '../../hooks/useGroups';
 import { useCurrentUser } from '../../hooks/useAuth';
 import { useAssignItems } from '../../hooks/useAI';
-import { useEntitlements } from '../../hooks/useBilling';
 import { splitReceiptItems } from '../../utils/splitEngine';
 import { currencyDecimals, formatCurrency, getCurrencySymbol, isKnownCurrency, parseAmount, roundToCents } from '../../utils/currency';
 import { useMyCurrency } from '../../hooks/useCurrency';
@@ -26,7 +25,7 @@ import Chip from '../../components/ui/Chip';
 import Avatar from '../../components/ui/Avatar';
 import Icon from '../../components/ui/Icon';
 import Input from '../../components/ui/Input';
-import { PlanTag } from '../../components/ui/Badge';
+import PassTag from '../../components/PassTag';
 import ListRow, { SectionHeader } from '../../components/ui/ListRow';
 import { SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
@@ -40,7 +39,6 @@ const ReceiptReviewScreen: React.FC<RootScreenProps<'ReceiptReview'>> = ({ route
   const { data: receipt, isLoading } = useReceipt(receiptId);
   const { data: friends = [] } = useFriends();
   const { data: group } = useGroup(groupId ?? '');
-  const { can } = useEntitlements();
   const assign = useAssignItems();
   const updateReceipt = useUpdateReceiptData();
   const create = useCreateExpense();
@@ -99,10 +97,6 @@ const ReceiptReviewScreen: React.FC<RootScreenProps<'ReceiptReview'>> = ({ route
 
   const runAssistant = () => {
     if (!instruction.trim()) return;
-    if (!can('ai_split_assistant')) {
-      navigation.navigate('Plans', { feature: 'ai_split_assistant' });
-      return;
-    }
     assign.mutate(
       { items, people, instruction: instruction.trim() },
       {
@@ -223,7 +217,7 @@ const ReceiptReviewScreen: React.FC<RootScreenProps<'ReceiptReview'>> = ({ route
           <Text variant="bodyStrong" style={{ flex: 1 }}>
             {tr('receipt.assistant')}
           </Text>
-          {!can('ai_split_assistant') ? <PlanTag plan="pro" /> : null}
+          <PassTag feature="split_assistant" />
         </View>
         <Text variant="caption" tone="tertiary" style={{ marginTop: 4 }}>
           {tr('receipt.assistantBody')}
