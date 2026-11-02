@@ -25,6 +25,20 @@ module.exports = ({ config }) => {
     plugins: [
       ...(config.plugins ?? []),
       [
+        'expo-build-properties',
+        {
+          android: {
+            // The ads SDK brings WorkManager with an old Room (2.2.x), whose shrinker rules
+            // keep the generated database classes but not their constructors. Release
+            // builds then crash on launch ("Failed to create an instance of WorkDatabase").
+            extraProguardRules: [
+              '-keep class * extends androidx.room.RoomDatabase { <init>(); }',
+              '-keep class * extends androidx.work.ListenableWorker { public <init>(android.content.Context, androidx.work.WorkerParameters); }',
+            ].join('\n'),
+          },
+        },
+      ],
+      [
         'react-native-google-mobile-ads',
         {
           androidAppId: process.env.ADMOB_ANDROID_APP_ID || SAMPLE_ANDROID_APP_ID,
