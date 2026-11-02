@@ -2,7 +2,7 @@
 
 > Split it. Settle it. Stay friends. — Expense splitting for friends, homes and trips, with AI that reads your receipts.
 
-Expo + React Native app, plus a small Node server (`server/`) for **Stripe subscriptions** and **Claude-powered AI features**.
+Expo + React Native app, plus a small Node server (`server/`) for accounts, shared data and **Claude-powered AI features**. The app is free: each AI feature has 3 free uses a month, then a short rewarded ad (Google AdMob) unlocks one more.
 
 ---
 
@@ -45,10 +45,10 @@ The app talks to the WhoOwes server (`server/`) whenever `EXPO_PUBLIC_API_URL` i
 Phone app (Expo) ──HTTPS──► WhoOwes API (Node, server/) ──► MongoDB (Atlas)
                                    ├──► Twilio Verify   (sign-in codes by SMS)
                                    ├──► Claude API      (receipt reading, Quick Add, insights)
-                                   └──► Stripe          (Plus / Pro subscriptions)
+                                   └──► Google AdMob    (rewarded ads, server-side verification)
 ```
 
-Everything is stored on the server: accounts, friends, groups, expenses, payments, receipts, reminders and subscriptions. The server checks every request: you only see expenses you're part of (or groups you're in), you can only split with friends or group members, and split amounts must add up to the cent.
+Everything is stored on the server: accounts, friends, groups, expenses, payments, receipts, reminders and each user's monthly AI usage. The server checks every request: you only see expenses you're part of (or groups you're in), you can only split with friends or group members, and split amounts must add up to the cent.
 
 Without `EXPO_PUBLIC_API_URL` the app runs as a self-contained **demo** on sample data (handy for design work).
 
@@ -69,7 +69,7 @@ echo EXPO_PUBLIC_API_URL=http://192.168.x.x:4000 > .env
 npx expo start -c            # scan the QR code with Expo Go
 ```
 
-Sign up with your real number: no text is sent locally, and the code is **123456** (the app shows it). Locally the server starts its own MongoDB, stored in `server/data/mongo`; delete that folder to start fresh. The first start downloads MongoDB once (a few hundred MB), so it takes a minute; after that it starts in seconds. To use your Atlas cluster locally instead, set `MONGODB_URI` in `server/.env`. `DEV_PLAN=pro` in `server/.env` unlocks the paid AI features without Stripe.
+Sign up with your real number: no text is sent locally, and the code is **123456** (the app shows it). Locally the server starts its own MongoDB, stored in `server/data/mongo`; delete that folder to start fresh. The first start downloads MongoDB once (a few hundred MB), so it takes a minute; after that it starts in seconds. To use your Atlas cluster locally instead, set `MONGODB_URI` in `server/.env`. For quicker testing, set `AD_UNLOCK_SECONDS=5` in `server/.env`.
 
 ---
 
@@ -85,7 +85,7 @@ The server has to be online so everyone's phone can reach it. Render runs the se
    - **Clusters** → **Connect** → **Drivers** → copy the connection string (`mongodb+srv://<user>:<password>@cluster0.xxxx.mongodb.net/?…`) and put the user's password in place of `<password>`.
    - The server creates its collections and indexes on first start, in a database named `whoowes`.
 3. **Twilio** (texts the sign-in codes): create an account at twilio.com. On a trial account, use Console → **Verify** → **Try out Verify**: the sample request contains the Service SID (`VA…`) and Account SID (`AC…`); the Auth Token is under **Account Info** on the Console home page. A trial can only text numbers you verify in the Console (up to 5); upgrade it before real users sign up.
-4. **Render**: Dashboard → **New → Blueprint** → choose this repo and branch. `render.yaml` creates the `whoowes-api` web service (check it says **free**). Paste the Atlas connection string as `MONGODB_URI`, the Twilio values and your `ANTHROPIC_API_KEY` when asked; Stripe can stay empty until you charge.
+4. **Render**: Dashboard → **New → Blueprint** → choose this repo and branch. `render.yaml` creates the `whoowes-api` web service (check it says **free**). Paste the Atlas connection string as `MONGODB_URI`, the Twilio values and your `ANTHROPIC_API_KEY` when asked.
 5. When the deploy is live, open `https://<your-service>.onrender.com/health`. It should show `"database": true` and `"sms": "twilio"`. If `database` is `false`, check the Atlas **Network Access** list and the password in the connection string.
 6. **Point the app at it**: in the app's `.env` set `EXPO_PUBLIC_API_URL=https://<your-service>.onrender.com`, then `npx expo start -c` (Expo Go) or build the app (below).
 
@@ -100,7 +100,7 @@ When you have real users: upgrade the Render service to `0.5c-512mb` (a few doll
 Expo Go is for testing. To give the app to others, build it with `EXPO_PUBLIC_API_URL` set to the Render URL (the URL is baked in at build time). `eas.json` already sets it for cloud builds, because `.env` is git-ignored and never uploaded to Expo's build servers.
 
 - **Android APK** (install directly on phones): `npx eas-cli build -p android --profile preview`. When it finishes, Expo gives a download link and QR code.
-- **Google Play** (`.aab`): `npx eas-cli build -p android --profile production`. The full publishing checklist (store listing, Data safety answers, subscriptions, testers) is in [docs/google-play.md](docs/google-play.md).
+- **Google Play** (`.aab`): `npx eas-cli build -p android --profile production`. The full publishing checklist (AdMob, store listing, Data safety answers, testers) is in [docs/google-play.md](docs/google-play.md).
 - **Local build without Expo's servers**: `npx expo prebuild --platform android`, then `cd android` and `gradlew assembleRelease`. This reads `.env`. It needs Android Studio and a Java JDK.
 - **iPhone / app stores**: `eas build` + `eas submit` (iOS needs an Apple Developer account).
 
@@ -118,50 +118,36 @@ People can mute "Friends & groups" and keep "Money" alerts in Android's notifica
 
 ---
 
-## Payments
+## AI passes and ads
 
-Phone apps must sell subscriptions through the app store, so there are two paths that both feed the same plan check on the server:
+Every AI feature (receipt scan, Quick Add, Split Assistant, AI insights) has **3 free uses a month**. After that, each use is unlocked by watching a **rewarded ad**.
 
-- **Android (and later iPhone): Google Play Billing through RevenueCat.** The paywall buys with the RevenueCat SDK; the server reads the result from RevenueCat's API and keeps it in sync with RevenueCat webhooks.
-- **Web: Stripe Checkout.**
+The server is the only judge, using its own clock:
 
-A user gets the better of the two plans. Setup for Google Play is in [docs/google-play.md](docs/google-play.md#4-subscriptions-google-play--revenuecat).
-
-```
-Paywall (Android) → RevenueCat SDK → Google Play payment sheet
-                 → POST /billing/sync → server asks RevenueCat → plan saved
-RevenueCat webhooks → POST /webhooks/revenuecat → server re-reads the customer (renewals, cancels, expiry, refunds)
-Account → Manage subscription → Google Play subscriptions page
-```
-
-RevenueCat setup the code relies on: entitlements named `plus` and `pro`; packages in the current offering named `plus_monthly`, `plus_yearly`, `pro_monthly`, `pro_yearly`; Google Play base plans whose ids contain "month" or "year". A phone build without `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` shows paid plans as "coming soon" (store rules don't allow Stripe there).
-
-### Stripe (web)
-
-```bash
-cd server
-npm run stripe:setup      # creates "WhoOwes Plus" + "WhoOwes Pro" and 4 prices (looked up by lookup_key)
-```
-
-Then in the Stripe Dashboard → Settings → Billing → **Customer portal**: enable it and allow customers to switch between the WhoOwes prices and cancel. Add a webhook endpoint `https://<your-service>.onrender.com/webhooks/stripe` for `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, and put its signing secret in `STRIPE_WEBHOOK_SECRET`. Locally, `npm run stripe:listen` forwards webhooks.
+- Uses are counted per user per calendar month (UTC) in `ai_usage`. The phone's date and time are never used, so changing them resets nothing.
+- Each AI route takes a use before calling Claude (with atomic updates, so two requests can't both take the last one) and gives it back if the call fails.
+- The same month's AI insights again are free: the write-up is cached and only rewritten when the numbers change.
 
 ```
-Paywall → POST /billing/checkout → Stripe Checkout (in-app browser)
-       → Stripe → GET /billing/return → whoowes://billing/return → app refetches plan
-Stripe webhooks → server keeps each user's plan/status in sync (renewals, cancels, failed cards)
-Account → Manage billing → Stripe Customer Portal (switch plan, update card, cancel, invoices)
+AI call → 402 ad_required → "Watch a 30-second ad" sheet
+       → POST /ai/ad/start   (server notes the time; returns a session id)
+       → rewarded ad plays   (AdMob gets user id + session id for verification)
+       → AdMob → GET /ai/ad/ssv   (signed by Google; checked against Google's keys)
+       → POST /ai/ad/claim   (refused until 30 s of server time have passed and,
+                              with ADMOB_SSV_REQUIRED=true, Google has confirmed it)
+       → the AI call runs again by itself
 ```
 
-The server enforces plans: every AI endpoint checks the caller's plan and monthly scan quota and returns `402` with `code: upgrade_required | quota_exceeded`, which the app turns into the paywall.
+Other limits: one unlock per ad session, at most `AD_UNLOCKS_PER_DAY` (20) ads per person per day.
 
----
+In Expo Go and on the web there's no ad SDK; development builds show a 30-second stand-in ad instead, so the flow can still be tested. AdMob setup (app id, ad unit, consent messages, verification URL) is in [docs/google-play.md](docs/google-play.md#4-rewarded-ads-admob).
 
 ## API
 
 | Area | Endpoints |
 |---|---|
 | Sign-in | `POST /auth/phone/start` `{ phone }` · `POST /auth/phone/verify` `{ phone, code, name?, currency? }` → `{ user, token }` (30-day session) |
-| Me | `GET/PATCH/DELETE /me` (`PATCH` takes `name`, `email`, `currency`; delete anonymises the account, removes receipts, and cancels a Stripe subscription; store subscriptions are cancelled by the user in the store) |
+| Me | `GET/PATCH/DELETE /me` (`PATCH` takes `name`, `email`, `currency`; delete anonymises the account and removes receipts and AI usage) |
 | Friends | `GET /friends` · `GET /friends/requests` · `POST /friends` · `POST /friends/requests/:id/accept` / `decline` · `DELETE /friends/:userId` · `GET /users/search?q=` |
 | Contacts | `POST /contacts/match` `{ hashes: sha256(E.164)[] }`: the server never sees raw numbers |
 | Reminders | `POST /friends/:userId/remind` · `GET /reminders` · `POST /reminders/:id/dismiss` |
@@ -169,7 +155,7 @@ The server enforces plans: every AI endpoint checks the caller's plan and monthl
 | Expenses | `GET /expenses?groupId=` · `GET/DELETE /expenses/:id` · `POST /expenses` · `POST /expenses/:id/splits/:userId/paid` |
 | Payments | `GET /settlements?groupId=` · `GET /settlements/pending` · `POST /settlements` · `POST /settlements/:id/respond` · `DELETE /settlements/:id` |
 | Receipts & AI | `POST /ai/receipts/parse` · `GET/PATCH /receipts/:id` · `POST /ai/expenses/quick-add` · `POST /ai/receipts/assign` · `POST /ai/insights` |
-| Billing | `GET /billing/subscription` · `POST /billing/sync` (after a store purchase) · `POST /billing/checkout` · `POST /billing/portal` · `POST /webhooks/revenuecat` · `POST /webhooks/stripe` |
+| AI pass | `GET /ai/pass` · `POST /ai/ad/start` · `POST /ai/ad/claim` · `GET /ai/ad/ssv` (AdMob's signed callback) |
 | Public pages | `GET /privacy` · `GET /terms` · `GET /delete-account` (contact address from `SUPPORT_EMAIL`) |
 
 Money is stored as integer cents with an ISO 4217 currency on every expense and payment. Without one, the server uses the group's currency, then the user's, then USD. Group totals come back per currency (`totals`).
@@ -197,7 +183,7 @@ Photos are resized to 1600px JPEG on the phone before upload (this also converts
 
 - **Push notifications.** Reminders and payment confirmations show up when people open the app. Push needs a development or production build (not Expo Go) plus `expo-notifications`.
 - **Database backups.** Turn on backups for the free Atlas cluster (cluster → **Backup**): Atlas then takes a daily snapshot and keeps the last four. Paid tiers add continuous, point-in-time backups.
-- **iPhone subscriptions.** The RevenueCat code already handles iOS; add the App Store app in RevenueCat and set `EXPO_PUBLIC_REVENUECAT_IOS_KEY`.
+- **iPhone ads.** Add an iOS app and rewarded unit in AdMob, set `ADMOB_IOS_APP_ID` and `EXPO_PUBLIC_ADMOB_REWARDED_IOS`, and consider the App Tracking Transparency prompt for personalised ads.
 - **Translations.** French, Spanish and Hindi were written by AI. Have a native speaker click through the app in each language. New text goes in `src/i18n/locales/en.ts` first; TypeScript then lists every language that's missing it.
 - **Privacy policy and terms.** The server serves drafts at `/privacy` and `/terms`, written from what the app actually does. Have them checked before you rely on them.
 - **Reviewer sign-in.** `REVIEW_PHONE` + `REVIEW_CODE` let store reviewers in without a text message. Change the code after each review, or clear both to turn it off.
@@ -214,7 +200,6 @@ src/
   components/                BalanceHero, ExpenseRow, SettlementRow, AddSheet, GroupTile
   navigation/                Root stack + MainTabs (custom tab bar with center +)
   screens/                   home, friends, groups, activity, expenses, receipts, settlements, account, insights, auth
-  billing/plans.ts           Plan catalogue + feature gates (mirrors server/src/plans.ts)
   hooks/                     React Query hooks; useBilling (entitlements, checkout, paywall), useAI
   services/                  impl.ts picks api/live.ts (server) or mock/* (demo); ai, billing, contacts, phoneAuth
   utils/                     balanceEngine (per-currency balances, debt simplification), splitEngine, insights, csv, phone, currency
@@ -225,8 +210,7 @@ server/
   src/routes/                phone.ts (sign-in), people.ts (me, friends, contacts, reminders),
                              money.ts (groups, expenses, payments, receipts), billing.ts, webhooks.ts, ai.ts
   src/ai/claude.ts           Claude prompts + schemas
-  src/stripe.ts              Stripe client, price lookup, subscription → plan sync
-  scripts/stripe-setup.ts    Creates products/prices
+  src/aiPass.ts              Free monthly AI uses, ad sessions, AdMob verification
 render.yaml                  Render Blueprint for the API (database: MongoDB Atlas, via MONGODB_URI)
 assets/brand/                Logo source (owl-glyph.svg) — `npm run icons` regenerates every icon
 ```
@@ -245,8 +229,6 @@ The owl's brow is a **W**; its pupils are **split coins**. Edit `assets/brand/ow
 | `npm run store-assets` | Google Play icon (512×512) and feature graphic (1024×500) into `assets/store/` |
 | `npm run locale-data` | Regenerate currency and country names in every app language (`src/i18n/currencies.ts`, `countries.ts`) |
 | `npm run server:dev` | Start the API server (from the repo root) |
-| `cd server && npm run stripe:setup` | Create Stripe products/prices |
-| `cd server && npm run stripe:listen` | Forward Stripe webhooks to localhost |
 
 ## License
 

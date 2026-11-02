@@ -2,13 +2,13 @@
 
 A start-to-finish checklist. The server is `https://whoowes-api-nbi9.onrender.com`; the app id is `com.whoowes.app`.
 
-The order matters: Google only lets you create subscriptions after a build is uploaded, and RevenueCat can only see subscriptions after they exist in Play Console.
+WhoOwes is free. Each AI feature has 3 free uses a month; after that, people can watch a short rewarded ad (Google AdMob) to unlock one more. There are no subscriptions or in-app purchases.
 
 ```
-1. Accounts           Play Console ($25), Expo, RevenueCat (free)
+1. Accounts           Play Console ($25), Expo, AdMob (free)
 2. Server settings    SUPPORT_EMAIL, REVIEW_PHONE/CODE on Render
 3. First build        eas build → upload .aab to Internal testing
-4. Subscriptions      Play products → RevenueCat → keys → rebuild
+4. Ads                AdMob app + rewarded unit → ids → verification → rebuild
 5. Store listing      text, graphics, screenshots
 6. App content        privacy, Data safety, ratings, app access…
 7. Testing            internal → closed (12 testers × 14 days for new personal accounts)
@@ -23,7 +23,7 @@ The order matters: Google only lets you create subscriptions after a build is up
   - A **personal** account created after November 2023 must run a **closed test with at least 12 testers for 14 days in a row** before it can publish to everyone. Start recruiting testers early.
   - An **organization** account skips that rule but needs a D-U-N-S number for your business.
 - **Expo**: free account at [expo.dev](https://expo.dev), used by `eas build`.
-- **RevenueCat**: free at [app.revenuecat.com](https://app.revenuecat.com) until $2.5k/month in revenue.
+- **Google AdMob**: free at [admob.google.com](https://admob.google.com). Add payment details there to get paid for ads.
 - **Twilio**: upgrade from the trial before testers sign up. The trial only texts 5 numbers you verify by hand, and closed testing needs 12 people. Verify costs about $0.05 per sign-in.
 
 ## 2. Server settings (Render → whoowes-api → Environment)
@@ -48,7 +48,7 @@ npx eas-cli build -p android --profile production
 
 The first time, let EAS create the signing key. Then:
 
-1. **Play Console → Create app**: name `WhoOwes`, default language, **App**, **Free** (in-app subscriptions are fine in a free app; a paid app can never become free). Accept the declarations.
+1. **Play Console → Create app**: name `WhoOwes`, default language, **App**, **Free**. Accept the declarations.
 2. **Testing → Internal testing → Create new release**. Download the `.aab` from the EAS build page and upload it. Keep **Play App Signing** on (the default); the EAS key becomes your upload key.
 3. Add yourself under **Testers** (an email list), save, and roll out. Open the opt-in link on your phone and install from Play.
 
@@ -56,65 +56,41 @@ The first upload has to be done by hand like this. Later builds can go up with `
 
 Version codes are counted by EAS (`"autoIncrement": true` in `eas.json`), so every production build gets a new one automatically.
 
-## 4. Subscriptions (Google Play + RevenueCat)
+## 4. Rewarded ads (AdMob)
 
-### 4a. Products in Play Console
+The server does the counting and timing (by its own clock, so changing the phone's date does nothing). AdMob only supplies the ads.
 
-**Monetize with Play → Products → Subscriptions → Create subscription** (available once the build from step 3 is uploaded):
+### 4a. Create the app and the ad unit
 
-| Product ID | Name | Base plans (ID → billing period) | Suggested price |
-|---|---|---|---|
-| `whoowes_plus` | WhoOwes Plus | `monthly` → 1 month, `yearly` → 1 year | $2.99 / $24.99 |
-| `whoowes_pro` | WhoOwes Pro | `monthly` → 1 month, `yearly` → 1 year | $5.99 / $49.99 |
+1. [AdMob](https://admob.google.com) → **Apps → Add app** → Android, "Is the app listed on a supported app store?" **No** for now (link it to the Play listing once it's live). Name it WhoOwes.
+2. Copy the **App ID** (`ca-app-pub-…~…`, App settings).
+3. **Ad units → Add ad unit → Rewarded**. Name it "Unlock AI use". Reward: amount `1`, item `ai_use`. Copy the **ad unit ID** (`ca-app-pub-…/…`).
+4. **Privacy & messaging → GDPR** (and **US state regulations**): create the consent messages and publish them. The app shows them by itself before the first ad where the law requires it.
 
-- Base plan ids **must contain "month" or "year"**; the server reads the billing interval from them.
-- Make both base plans **auto-renewing**, set the price (Play converts it for other countries), and **Activate** them.
-- Optional free trial: on a base plan, **Add offer** → eligibility **New customer acquisition** → a 7-day free phase. The paywall shows the trial automatically to people who qualify.
-- Product ids can never be reused after deletion, so type them carefully.
+### 4b. Server-side verification (stops faked ad views)
 
-### 4b. Let RevenueCat talk to Google
+1. Edit the rewarded ad unit → **Server-side verification** → callback URL `https://whoowes-api-nbi9.onrender.com/ai/ad/ssv` → **Verify URL**, then save.
+2. On Render, set `ADMOB_SSV_REQUIRED` to `true`. From then on an ad only unlocks a use after Google confirms it was watched *and* 30 seconds have passed on the server.
 
-RevenueCat's guide: [Creating Play service credentials](https://www.revenuecat.com/docs/service-credentials/creating-play-service-credentials). In short:
+Until this is on, the server's 30-second timer is the only check.
 
-1. In Google Cloud, enable the **Google Play Android Developer API** and the **Google Play Developer Reporting API**.
-2. Create a **service account** with the roles **Pub/Sub Editor** and **Monitoring Viewer**, and download a **JSON key**.
-3. In Play Console → **Users and permissions**, invite the service account's email. Under App permissions add WhoOwes, and grant: view app information, **view financial data**, **manage orders and subscriptions**, and manage store presence.
-4. In RevenueCat: create a project → **Apps → Add app → Google Play Store**, package `com.whoowes.app`. Upload the JSON key, then delete the downloaded file.
-5. Turn on **Google real-time developer notifications** in the same RevenueCat app page (it gives you a Pub/Sub topic to paste into Play Console → Monetization setup). This makes renewals and cancellations show up within seconds.
+### 4c. Ids into the build
 
-Google can take **up to 36 hours** before the credentials work.
+```bash
+npx eas-cli env:create --name ADMOB_ANDROID_APP_ID --value "ca-app-pub-XXXX~YYYY" --environment production --visibility plaintext
+```
 
-### 4c. Products, entitlements and the offering in RevenueCat
+and add the ad unit id to the `production` profile's `env` in `eas.json`:
 
-1. **Products**: import the four Play products (`whoowes_plus:monthly`, `whoowes_plus:yearly`, `whoowes_pro:monthly`, `whoowes_pro:yearly`).
-2. **Entitlements**: create two, with identifiers exactly `plus` and `pro`. Attach the two Plus products to `plus` and the two Pro products to `pro`.
-3. **Offerings**: create one (e.g. `default`) and make it **Current**. Add four packages with **custom identifiers** exactly:
+```json
+"EXPO_PUBLIC_ADMOB_REWARDED_ANDROID": "ca-app-pub-XXXX/ZZZZ"
+```
 
-| Package identifier | Product |
-|---|---|
-| `plus_monthly` | `whoowes_plus:monthly` |
-| `plus_yearly` | `whoowes_plus:yearly` |
-| `pro_monthly` | `whoowes_pro:monthly` |
-| `pro_yearly` | `whoowes_pro:yearly` |
+Then rebuild. Builds without these show Google's test ads (and earn nothing). Development builds always show test ads, so you never click your own real ads (AdMob bans accounts for that).
 
-### 4d. Keys and webhook
+### 4d. Check it
 
-1. RevenueCat → **Project settings → API keys**:
-   - Copy the **Google Play public SDK key** (starts with `goog_`). Add it to the app as `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`, both in `.env` and in both build profiles in `eas.json`. It isn't secret.
-   - Create a **secret API key** for **API v1** (starts with `sk_`). Put it on Render as `REVENUECAT_SECRET_KEY`. It is secret: never put it in the app or the repo.
-2. Make up a long random string (e.g. `openssl rand -hex 24`). On Render set `REVENUECAT_WEBHOOK_AUTH` to `Bearer <that string>`.
-3. RevenueCat → **Integrations → Webhooks → Add**:
-   - URL `https://whoowes-api-nbi9.onrender.com/webhooks/revenuecat`
-   - Authorization header value: exactly the same `Bearer <that string>`
-   - Send a test event; RevenueCat should show **200**.
-4. `/health` should now show `"appStoreBilling": true`.
-5. **Rebuild** the app (step 3's command) and upload the new `.aab` to Internal testing. Builds made without the key show paid plans as "Coming soon".
-
-### 4e. Test a purchase without paying
-
-1. Play Console → **Settings → License testing**: add the Gmail accounts of your testers. Their purchases are free test purchases, and subscriptions renew every few minutes (a monthly plan renews every 5 minutes) so you can watch renewals and expiry.
-2. Install from the Internal testing link (not a sideloaded APK), open **Account → See plans**, and subscribe.
-3. Check that the plan switches to Pro and that **Account → Manage subscription** opens Google Play. Cancel there and confirm the app shows "Ends …".
+Install from Internal testing, use a receipt scan 3 times, then try a 4th: the "Watch a 30-second ad" sheet appears, the ad plays, and the scan carries on. **Account** shows the counts and when they reset.
 
 ## 5. Store listing (Grow users → Store presence → Main store listing)
 
@@ -145,17 +121,17 @@ Google can take **up to 36 hours** before the credentials work.
 > PRIVATE BY DESIGN
 > • Sign in with your phone number, no password to remember
 > • Find friends from your contacts: numbers are scrambled on your phone first and never stored
-> • No ads, no tracking
+> • No banner ads: a short ad only plays if you choose to unlock more AI
 >
-> WHOOWES PLUS AND PRO
-> Free covers unlimited expenses, friends and groups, plus 3 AI receipt scans a month. Plus adds 30 scans, AI Quick Add (type "Tacos 64 with Sam and Priya") and CSV export. Pro adds unlimited scans, the AI Split Assistant and monthly spending insights. Subscriptions are billed through Google Play and can be cancelled any time.
+> FREE, WITH AI WHEN YOU WANT IT
+> Unlimited expenses, friends and groups, and CSV export, all free. Every AI feature (receipt scans, Quick Add like "Tacos 64 with Sam and Priya", the Split Assistant and monthly spending summaries) has 3 free uses a month. Need more? Watch a short ad to unlock another.
 >
 > WhoOwes records who owes what. It doesn't move money or connect to your bank.
 
 **Graphics**:
 - App icon: `assets/store/play-icon-512.png`
 - Feature graphic: `assets/store/feature-graphic.png` (regenerate both with `npm run store-assets`)
-- Phone screenshots: 2 to 8, taken on your phone from the real app. Good ones: Home with balances, a group, the receipt scan result, settle up, the plans screen. Use the sample data account, not real friends' names and numbers.
+- Phone screenshots: 2 to 8, taken on your phone from the real app. Good ones: Home with balances, a group, the receipt scan result, settle up, the AI uses card in Account. Use the sample data account, not real friends' names and numbers.
 
 **Category**: Finance. **Contact email**: your `SUPPORT_EMAIL`. **Privacy policy**: `https://whoowes-api-nbi9.onrender.com/privacy`.
 
@@ -279,13 +255,14 @@ Then match it in **Twilio → Verify → Geo permissions**: allow texts only to 
 |---|---|
 | Privacy policy | `https://whoowes-api-nbi9.onrender.com/privacy` |
 | App access | **All or some functionality is restricted.** Add instructions: *"Sign in with phone number +1 555-555-0123 (choose United States, +1). No text message is sent; enter code `<your REVIEW_CODE>`. The account has sample groups and expenses."* |
-| Ads | No ads |
-| Content rating | Fill in the questionnaire honestly. Category: **Utility, productivity, communication or other**. WhoOwes has no violence, sexual content, gambling or drugs. Users can share content with friends (names, expenses, reminders), and the app sells digital subscriptions. |
+| Ads | **Yes, my app contains ads** (rewarded ads only, shown when the user asks for one). |
+| Content rating | Fill in the questionnaire honestly. Category: **Utility, productivity, communication or other**. WhoOwes has no violence, sexual content, gambling or drugs. Users can share content with friends (names, expenses, reminders), and the app shows optional rewarded ads. |
 | Target audience | **18 and over** |
 | News app | No |
 | Health apps | No health features |
 | Financial features | WhoOwes doesn't lend, bank, invest, or move money. Declare that it provides none of the listed financial features. |
 | Government app | No |
+| Advertising ID | **Yes**: the Google Mobile Ads SDK uses it for ads (and fraud prevention). The build already declares the `AD_ID` permission. |
 | Data safety | See below |
 | Account deletion | In-app: Account → Delete account. Web link: `https://whoowes-api-nbi9.onrender.com/delete-account` |
 
@@ -293,7 +270,7 @@ Then match it in **Twilio → Verify → Geo permissions**: allow texts only to 
 
 **Does your app collect or share user data?** Yes. **Is all data encrypted in transit?** Yes. **Can users request deletion?** Yes.
 
-Services that work for you (Twilio, Anthropic, MongoDB, Render, RevenueCat, Google Play) count as **service providers, not sharing**. Answer **Shared: No** for everything below.
+Services that work for you (Twilio, Anthropic, MongoDB, Render) count as **service providers, not sharing**. The ad SDK is different: what it collects is listed separately below, following [Google's AdMob Data safety guidance](https://developers.google.com/admob/android/privacy/play-data-disclosure).
 
 | Data type | Collected | Required? | Processed ephemerally? | Purposes |
 |---|---|---|---|---|
@@ -301,14 +278,22 @@ Services that work for you (Twilio, Anthropic, MongoDB, Render, RevenueCat, Goog
 | Personal info → **Email address** | Yes | Optional | No | App functionality, Account management |
 | Personal info → **Phone number** | Yes | Required | No | App functionality, Account management, Fraud prevention & security |
 | Personal info → **User IDs** | Yes | Required | No | App functionality, Account management |
-| Financial info → **Purchase history** | Yes | Optional | No | App functionality |
 | Financial info → **Other financial info** (expenses, balances, payments between friends) | Yes | Required | No | App functionality |
 | Photos and videos → **Photos** (receipt photos) | Yes | Optional | **Yes**: sent to the AI to read and not stored | App functionality |
 | Files and docs (receipt PDFs) | Yes | Optional | **Yes** | App functionality |
 | Contacts | Yes | Optional | **Yes**: hashed numbers are compared and not stored | App functionality |
 | App activity → **Other user-generated content** (Quick Add text, expense notes) | Yes | Optional | No | App functionality |
 
-Not collected: location, web browsing, messages, audio, health, calendar, device or other IDs, crash logs, diagnostics. If you later add analytics or crash reporting, update this form. RevenueCat's SDK only adds **Purchase history**, which is already listed ([RevenueCat: Google Play's Data safety](https://www.revenuecat.com/docs/platform-resources/google-platform-resources/google-plays-data-safety)).
+Collected by the **Google Mobile Ads SDK** (when someone watches an ad). Check these against Google's page above before submitting, as it's the source of truth:
+
+| Data type | Collected | Shared | Purposes |
+|---|---|---|---|
+| Location → **Approximate location** (from IP address) | Yes | Yes | Advertising or marketing, Analytics, Fraud prevention |
+| Device or other IDs (**advertising ID**, app set ID) | Yes | Yes | Advertising or marketing, Analytics, Fraud prevention |
+| App activity → **App interactions** (ad views and taps) | Yes | Yes | Advertising or marketing, Analytics |
+| App info and performance → **Diagnostics**, **Crash logs** (SDK performance) | Yes | Yes | Analytics, Fraud prevention |
+
+Not collected by WhoOwes itself: precise location, web browsing, messages, audio, health, calendar. If you add other analytics or crash reporting, update this form.
 
 ## 7. Testing tracks
 
@@ -316,7 +301,6 @@ Not collected: location, web browsing, messages, audio, health, calendar, device
 2. **Closed testing**: create a track, add at least **12 testers** (an email list or a Google Group), and roll out a build. Google reviews this one, which typically takes a few days.
    - Testers must **opt in** through the link and **keep the app installed**. New personal accounts need 12 opted-in testers for **14 days in a row**.
    - Testers need real phone numbers that can receive texts (Twilio upgraded, see step 1).
-   - Add testers' Gmail addresses to **License testing** too if they should try subscriptions for free.
 3. When the 14 days are up, **Dashboard → Apply for production access** and answer the questions about your test.
 
 ## 8. Production
@@ -333,8 +317,7 @@ Create a release on the **Production** track with the latest `.aab` and roll out
 
 | Problem | Fix |
 |---|---|
-| Plans say "Coming soon" | The build has no `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`. Add it to `eas.json` and rebuild. |
-| Plans say "Not available right now" | RevenueCat returned no matching packages: check the offering is **Current** and the four package identifiers match exactly. Within the first 36 hours this can also be the Google credentials not working yet. |
-| Paid, but the app still shows Free | `/health` → `appStoreBilling` must be `true`. Check Render's logs for `[revenuecat]` errors (wrong secret key or webhook value), and that the entitlements are named `plus` and `pro`. **Plans → Restore purchases** re-syncs. |
-| "You need to sign in to Google" in the payment sheet | The phone's Play Store account isn't a tester on the track. |
+| "Couldn't load an ad" | New AdMob accounts and ad units can take a few hours to serve ads, and fill is lower in some countries. Test ads always load. Check the ad unit id in `eas.json`. |
+| The ad finished but nothing unlocked | With `ADMOB_SSV_REQUIRED=true` the unlock waits for Google's callback: check the ad unit's verification URL and Render's logs for `[ads]`. `/health` → `adVerification` shows which check is on. |
+| Only test ads in the store build | `ADMOB_ANDROID_APP_ID` (EAS environment) or `EXPO_PUBLIC_ADMOB_REWARDED_ANDROID` (`eas.json`) is missing. Add them and rebuild. |
 | Reviewer can't sign in | `/health` → `reviewLogin` must be `true`, and the instructions must say to pick **+1 (United States)**. |
