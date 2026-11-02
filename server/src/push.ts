@@ -28,7 +28,10 @@ export type PushKind =
   | 'payment_recorded'
   | 'payment_confirmed'
   | 'payment_declined'
-  | 'added_to_group';
+  | 'added_to_group'
+  | 'member_left'
+  | 'removed_from_group'
+  | 'group_deleted';
 
 /** Matches PushData in the app (src/services/notifications.ts): tells a tap which screen to open. */
 interface PushData {
@@ -40,7 +43,10 @@ interface PushData {
     | 'payment_recorded'
     | 'payment_confirmed'
     | 'payment_declined'
-    | 'added_to_group';
+    | 'added_to_group'
+    | 'member_left'
+    | 'removed_from_group'
+    | 'group_deleted';
   expenseId?: string;
   settlementId?: string;
   groupId?: string;
@@ -57,6 +63,8 @@ interface Params {
   /** Money, in cents, with its currency. */
   cents?: number | null;
   currency?: string | null;
+  /** Which way money is still open with the other person. */
+  dir?: 'owesYou' | 'youOwe';
 }
 
 export interface PushItem {
@@ -136,12 +144,45 @@ const TEXT: Record<PushKind, Record<Lang, Writer>> = {
     es: (p) => ({ title: `Estás en “${p.group}”`, body: `${p.name} te añadió al grupo.` }),
     hi: (p) => ({ title: `आप “${p.group}” में हैं`, body: `${p.name} ने आपको ग्रुप में जोड़ा।` }),
   },
+  member_left: {
+    en: (p) => ({
+      title: `${p.name} left “${p.group}”`,
+      body: p.dir === 'owesYou' ? `They still owe you ${p.amount}. You can still settle up.` : p.dir === 'youOwe' ? `You still owe them ${p.amount}. You can still settle up.` : 'They won’t see new expenses in this group.',
+    }),
+    fr: (p) => ({
+      title: `${p.name} a quitté « ${p.group} »`,
+      body: p.dir === 'owesYou' ? `Cette personne vous doit encore ${p.amount}. Vous pouvez toujours régler.` : p.dir === 'youOwe' ? `Vous lui devez encore ${p.amount}. Vous pouvez toujours régler.` : 'Cette personne ne verra plus les nouvelles dépenses du groupe.',
+    }),
+    es: (p) => ({
+      title: `${p.name} salió de “${p.group}”`,
+      body: p.dir === 'owesYou' ? `Todavía te debe ${p.amount}. Aún pueden saldar cuentas.` : p.dir === 'youOwe' ? `Todavía le debes ${p.amount}. Aún pueden saldar cuentas.` : 'Ya no verá los nuevos gastos del grupo.',
+    }),
+    hi: (p) => ({
+      title: `${p.name} ने “${p.group}” छोड़ दिया`,
+      body: p.dir === 'owesYou' ? `उन पर अब भी आपके ${p.amount} बाकी हैं। आप अब भी हिसाब चुका सकते हैं।` : p.dir === 'youOwe' ? `आप पर अब भी उनके ${p.amount} बाकी हैं। आप अब भी हिसाब चुका सकते हैं।` : 'उन्हें इस ग्रुप के नए ख़र्चे नहीं दिखेंगे।',
+    }),
+  },
+  removed_from_group: {
+    en: (p) => ({ title: `${p.name} removed you from “${p.group}”`, body: 'Your past expenses and balances stay in your history.' }),
+    fr: (p) => ({ title: `${p.name} vous a retiré de « ${p.group} »`, body: 'Vos dépenses et soldes passés restent dans votre historique.' }),
+    es: (p) => ({ title: `${p.name} te quitó de “${p.group}”`, body: 'Tus gastos y saldos anteriores siguen en tu historial.' }),
+    hi: (p) => ({ title: `${p.name} ने आपको “${p.group}” से हटा दिया`, body: 'आपके पिछले ख़र्चे और बकाया आपके इतिहास में रहेंगे।' }),
+  },
+  group_deleted: {
+    en: (p) => ({ title: `${p.name} deleted “${p.group}”`, body: 'Its expenses and balances stay in your history.' }),
+    fr: (p) => ({ title: `${p.name} a supprimé « ${p.group} »`, body: 'Ses dépenses et soldes restent dans votre historique.' }),
+    es: (p) => ({ title: `${p.name} eliminó “${p.group}”`, body: 'Sus gastos y saldos siguen en tu historial.' }),
+    hi: (p) => ({ title: `${p.name} ने “${p.group}” मिटा दिया`, body: 'इसके ख़र्चे और बकाया आपके इतिहास में रहेंगे।' }),
+  },
 };
 
 const CHANNEL: Record<PushKind, Channel> = {
   friend_request: 'social',
   friend_accepted: 'social',
   added_to_group: 'social',
+  member_left: 'social',
+  removed_from_group: 'social',
+  group_deleted: 'social',
   expense_owe: 'money',
   expense_owed: 'money',
   reminder: 'money',

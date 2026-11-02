@@ -93,3 +93,43 @@ export async function canTransactWith(me: string, other: string) {
   if (me === other) return true;
   return (await areFriends(me, other)) || (await shareAGroup(me, other));
 }
+
+/**
+ * What b owes a, per currency, in cents (negative: a owes b). Unpaid splits and
+ * confirmed payments between just these two; optionally only inside one group.
+ */
+export async function pairNet(a: string, b: string, groupId?: string): Promise<Map<string, number>> {
+  const net = new Map<string, number>();
+  const add = (currency: string, cents: number) => net.set(currency, (net.get(currency) ?? 0) + cents);
+  const inGroup = groupId ? { groupId } : {};
+  const expenses = await db.expenses
+    .find({ participants: { $all: [a, b] }, paidBy: { $in: [a, b] }, ...inGroup }, { projection: { paidBy: 1, splits: 1, currency: 1 } })
+    .toArray();
+  for (const e of expenses) {
+    const debtor = e.paidBy === a ? b : a;
+    const split = e.splits.find((s) => s.userId === debtor && !s.paid);
+    if (split) add(e.currency, e.paidBy === a ? split.amountCents : -split.amountCents);
+  }
+  const payments = await db.settlements
+    .find({ status: 'confirmed', $or: [{ fromUserId: a, toUserId: b }, { fromUserId: b, toUserId: a }], ...inGroup })
+    .toArray();
+  for (const p of payments) add(p.currency, p.fromUserId === a ? p.amountCents : -p.amountCents);
+  for (const [c, v] of net) if (v === 0) net.delete(c);
+  return net;
+}
+
+/** The biggest open amount between two people, signed like pairNet; null when square. */
+export function mainBalance(net: Map<string, number>): { currency: string; cents: number } | null {
+  let best: { currency: string; cents: number } | null = null;
+  for (const [currency, cents] of net) if (!best || Math.abs(cents) > Math.abs(best.cents)) best = { currency, cents };
+  return best;
+}
+
+/**
+ * People I can pay or remind: anyone I can split with, plus anyone I still have
+ * money open with. Leaving a group, or the group being deleted, never strands a debt.
+ */
+export async function canSettleWith(me: string, other: string) {
+  if (me === other) return false;
+  return (await canTransactWith(me, other)) || (await pairNet(me, other)).size > 0;
+}

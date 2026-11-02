@@ -6,7 +6,7 @@
  *   POST   /groups                          { name, description?, memberIds[], currency? }  (members must be my friends)
  *   PATCH  /groups/:id                      { name?, description?, currency? }  (any member)
  *   POST   /groups/:id/members              { userId }   (any member can add their friends)
- *   DELETE /groups/:id/members/:userId      (admins remove anyone; anyone can leave)
+ *   DELETE /groups/:id/members/:userId      (admins remove anyone; anyone can leave; the others are told)
  *   DELETE /groups/:id                      (admins only; expenses stay, unlinked)
  *
  *   GET    /expenses?groupId=               mine (payer or in the split); with groupId, every expense in that group
@@ -34,7 +34,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireUser } from '../auth.js';
 import { db, type ExpenseDoc, type ReceiptDoc, type SettlementDoc } from '../db/index.js';
-import { areFriends, canTransactWith, fail, isGroupMember, iso, myGroupIds, route, toCents } from '../domain/common.js';
+import { areFriends, canSettleWith, canTransactWith, fail, isGroupMember, iso, mainBalance, myGroupIds, pairNet, route, toCents } from '../domain/common.js';
 import { loadGroups, serializeExpenses, serializeSettlements } from '../domain/serialize.js';
 import { FALLBACK_CURRENCY, currencyCode } from '../currency.js';
 import { nameOf, notify, type PushItem } from '../push.js';
@@ -189,7 +189,55 @@ moneyRouter.delete(
     const role = await myRole(groupId, me);
     if (!role) fail(404, 'Group not found.');
     if (target !== me && role !== 'admin') fail(403, 'Only group admins can remove people.');
-    await db.groups.updateOne({ _id: groupId }, { $pull: { members: { userId: target } }, $set: { updatedAt: new Date() } });
+    const pulled = await db.groups.findOneAndUpdate(
+      { _id: groupId, 'members.userId': target },
+      { $pull: { members: { userId: target } }, $set: { updatedAt: new Date() } },
+      { returnDocument: 'after' },
+    );
+    if (!pulled) fail(404, 'They are not in this group.');
+
+    // Nobody left: the group goes, its history stays.
+    if (pulled.members.length === 0) {
+      await db.groups.deleteOne({ _id: groupId });
+      await db.expenses.updateMany({ groupId }, { $set: { groupId: null } });
+      await db.settlements.updateMany({ groupId }, { $set: { groupId: null } });
+      return res.json(null);
+    }
+    // The last admin left: the longest-standing member takes over.
+    if (!pulled.members.some((m) => m.role === 'admin')) {
+      const next = [...pulled.members].sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())[0];
+      await db.groups.updateOne({ _id: groupId, 'members.userId': next.userId }, { $set: { 'members.$.role': 'admin' } });
+    }
+
+    if (target === me) {
+      // Tell everyone still in it, with what's still open between them and the person who left.
+      const name = await nameOf(me);
+      const items = await Promise.all(
+        pulled.members.map(async (m) => {
+          const open = mainBalance(await pairNet(m.userId, me, groupId));
+          return {
+            userId: m.userId,
+            kind: 'member_left' as const,
+            params: {
+              name,
+              group: pulled.name,
+              ...(open ? { cents: Math.abs(open.cents), currency: open.currency, dir: open.cents > 0 ? ('owesYou' as const) : ('youOwe' as const) } : {}),
+            },
+            data: { type: 'member_left' as const, groupId, userId: me },
+          };
+        }),
+      );
+      notify(items);
+    } else {
+      notify([
+        {
+          userId: target,
+          kind: 'removed_from_group',
+          params: { name: await nameOf(me), group: pulled.name },
+          data: { type: 'removed_from_group', groupId },
+        },
+      ]);
+    }
     const left = await loadGroups([groupId], me);
     res.json(left[0] ?? null);
   }),
@@ -203,10 +251,23 @@ moneyRouter.delete(
     const role = await myRole(groupId, me);
     if (!role) fail(404, 'Group not found.');
     if (role !== 'admin') fail(403, 'Only group admins can delete the group.');
-    await db.groups.deleteOne({ _id: groupId });
+    const group = await db.groups.findOneAndDelete({ _id: groupId });
     // Expenses and payments keep their history, just without the group.
     await db.expenses.updateMany({ groupId }, { $set: { groupId: null } });
     await db.settlements.updateMany({ groupId }, { $set: { groupId: null } });
+    if (group) {
+      const name = await nameOf(me);
+      notify(
+        group.members
+          .filter((m) => m.userId !== me)
+          .map((m) => ({
+            userId: m.userId,
+            kind: 'group_deleted' as const,
+            params: { name, group: group.name },
+            data: { type: 'group_deleted' as const, groupId },
+          })),
+      );
+    }
     res.status(204).end();
   }),
 );
@@ -407,11 +468,13 @@ moneyRouter.post(
       })
       .parse(req.body);
     if (body.toUserId === me) fail(400, "You can't pay yourself.");
-    if (body.groupId) {
-      await requireMember(body.groupId, me);
-      if (!(await isGroupMember(body.groupId, body.toUserId))) fail(400, 'They are not in this group.');
-    } else if (!(await canTransactWith(me, body.toUserId))) {
-      fail(403, 'You can only pay friends or people in your groups.');
+    if (body.groupId && (await isGroupMember(body.groupId, me)) && (await isGroupMember(body.groupId, body.toUserId))) {
+      // A payment inside a group we're both still in.
+    } else if (!(await canSettleWith(me, body.toUserId))) {
+      fail(403, 'You can only pay friends, people in your groups, or people you still owe.');
+    } else if (body.groupId) {
+      // One of us has left the group: it becomes a direct payment.
+      body.groupId = undefined;
     }
     const now = new Date();
     const doc: SettlementDoc = {

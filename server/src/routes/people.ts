@@ -29,7 +29,7 @@ import { stripe } from '../stripe.js';
 import { getAccount, saveAccount } from '../store.js';
 import { env } from '../env.js';
 import {
-  canTransactWith,
+  canSettleWith,
   escapeRegex,
   fail,
   iso,
@@ -364,7 +364,7 @@ peopleRouter.post(
     const { amount, currency } = z
       .object({ amount: z.number().positive().optional(), currency: currencyCode.optional() })
       .parse(req.body ?? {});
-    if (!(await canTransactWith(me, to)) || to === me) fail(403, 'You can only remind friends or people in your groups.');
+    if (!(await canSettleWith(me, to))) fail(403, 'You can only remind friends, people in your groups, or people who owe you.');
     const recent = await db.reminders.findOne({ fromUserId: me, toUserId: to, createdAt: { $gt: new Date(Date.now() - 12 * HOUR) } });
     if (recent) fail(429, 'You already sent a reminder today. Give them a little time.', 'rate_limited');
     await db.reminders.insertOne({
