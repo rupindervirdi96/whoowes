@@ -107,8 +107,7 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
   const [shares, setShares] = useState<Record<string, number>>({});
   const [day, setDay] = useState<Date>(() => draftDay(draft?.date));
   const [notes, setNotes] = useState('');
-  const [notesOpen, setNotesOpen] = useState(false);
-  const [sheet, setSheet] = useState<'group' | 'payer' | 'date' | 'currency' | null>(null);
+  const [sheet, setSheet] = useState<'group' | 'payer' | 'date' | 'currency' | 'split' | 'category' | 'notes' | null>(null);
 
   const openCurrency = useCallback(() => setSheet('currency'), []);
   const group = groups.find((g) => g.id === groupId);
@@ -264,10 +263,29 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
         ? { tone: 'negative' as const, text: tr('expense.youOweName', { name: firstName(payer.name), amount: formatCurrency(myShare, currency) }) }
         : null;
 
-  const today = startOfDay(new Date());
-  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-  const isCustomDay = !sameDay(day, today) && !sameDay(day, yesterday);
   const equalEach = splitMode === 'equal' && split?.isValid && participants.length > 1 ? split.splits[0]?.amount : undefined;
+  const catColor = categoryColor(category, t.isDark);
+
+  // One line under the people: how it's split, and whether it adds up.
+  const addsUp = Math.abs(remaining) < 0.01;
+  const splitSummary: { text: string; tone: 'secondary' | 'warning' | 'positive' } =
+    participants.length === 0
+      ? { text: tr('expense.pickOne'), tone: 'warning' }
+      : splitMode === 'equal'
+        ? { text: equalEach !== undefined ? `${tr('split.equal')} · ${tr('expense.each', { amount: formatCurrency(equalEach, currency) })}` : tr('split.equal'), tone: 'secondary' }
+        : splitMode === 'shares'
+          ? { text: `${tr('split.shares')} · ${participants.map((p) => `${p.id === me.id ? tr('common.you') : firstName(p.name)} ${sharesOf(p.id)}`).join(', ')}`, tone: 'secondary' }
+          : total <= 0
+            ? { text: tr(splitMode === 'custom' ? 'split.custom' : 'split.percentage'), tone: 'secondary' }
+            : addsUp
+              ? { text: `${tr(splitMode === 'custom' ? 'split.custom' : 'split.percentage')} · ✓ ${tr('expense.addsUp')}`, tone: 'positive' }
+              : {
+                  text:
+                    splitMode === 'custom'
+                      ? tr(remaining > 0 ? 'expense.leftToAssign' : 'expense.overTotal', { amount: formatCurrency(Math.abs(remaining), currency) })
+                      : tr(remaining > 0 ? 'expense.leftToAssign' : 'expense.over100', { amount: `${Math.abs(remaining).toFixed(1)}%` }),
+                  tone: 'warning',
+                };
 
   return (
     <Screen
@@ -297,30 +315,50 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
 
       <AmountInput value={amount} onChangeText={setAmount} currency={currency} onCurrencyPress={openCurrency} autoFocus={!draft} />
 
-      <Input
-        value={title}
-        onChangeText={setTitle}
-        placeholder={tr('expense.whatFor')}
-        icon="edit"
-        maxLength={100}
-        returnKeyType="done"
-        onFocus={() => setTitleFocused(true)}
-        onBlur={() => setTitleFocused(false)}
-        containerStyle={suggestions.length && titleFocused ? { marginBottom: 8 } : undefined}
-      />
+      {/* What it was for, with its category on the left (guessed from the title until picked). */}
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={tr('expense.changeCategory', { name: tr(CATEGORY_BY_ID[category].labelKey) })}
+          onPress={() => setSheet('category')}
+          style={({ pressed }) => ({
+            width: 52,
+            height: 52,
+            borderRadius: t.radius.md,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 1.5,
+            borderColor: catColor,
+            backgroundColor: catColor + (t.isDark ? '26' : '14'),
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Text style={{ fontSize: 22, lineHeight: 28 }}>{CATEGORY_BY_ID[category].emoji}</Text>
+        </Pressable>
+        <Input
+          value={title}
+          onChangeText={setTitle}
+          placeholder={tr('expense.whatFor')}
+          maxLength={100}
+          returnKeyType="done"
+          onFocus={() => setTitleFocused(true)}
+          onBlur={() => setTitleFocused(false)}
+          containerStyle={{ flex: 1, marginBottom: 0 }}
+        />
+      </View>
       {suggestions.length && titleFocused ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: t.spacing.base }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 }}>
           <Text variant="caption" tone="tertiary">
             {tr('expense.recent')}
           </Text>
-          {suggestions.map((s) => (
+          {suggestions.map((sg) => (
             <Chip
-              key={s.title}
-              label={s.title}
-              leading={<Text style={{ fontSize: 15, marginLeft: 8 }}>{CATEGORY_BY_ID[s.category].emoji}</Text>}
+              key={sg.title}
+              label={sg.title}
+              leading={<Text style={{ fontSize: 15, marginLeft: 8 }}>{CATEGORY_BY_ID[sg.category].emoji}</Text>}
               onPress={() => {
-                setTitle(s.title);
-                setCategory(s.category);
+                setTitle(sg.title);
+                setCategory(sg.category);
                 setCategoryTouched(true);
               }}
             />
@@ -328,137 +366,83 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
         </View>
       ) : null}
 
-      {/* Category */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ marginHorizontal: -16, paddingLeft: 16, flexGrow: 0 }}>
-        {EXPENSE_CATEGORIES.map((c) => {
-          const active = c.id === category;
-          const col = categoryColor(c.id, t.isDark);
-          return (
-            <Pressable
-              key={c.id}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={tr(c.labelKey)}
-              onPress={() => {
-                setCategory(c.id);
-                setCategoryTouched(true);
-              }}
-              style={{
-                width: 76,
-                alignItems: 'center',
-                paddingVertical: 10,
-                borderRadius: t.radius.md,
-                borderWidth: 1.5,
-                borderColor: active ? col : t.colors.border,
-                backgroundColor: active ? col + (t.isDark ? '26' : '14') : t.colors.surface,
-              }}
-            >
-              <Text style={{ fontSize: 22, lineHeight: 28 }}>{c.emoji}</Text>
-              <Text variant="caption" numberOfLines={1} color={active ? col : t.colors.textSecondary} style={{ marginTop: 2, fontSize: 11 }}>
-                {tr(c.shortKey)}
-              </Text>
-            </Pressable>
-          );
-        })}
-        <View style={{ width: 16 }} />
-      </ScrollView>
-
-      {/* Context rows */}
-      <Card padding={4} style={{ paddingHorizontal: 12, marginTop: t.spacing.base }}>
-        <ListRow
-          leading={
-            <Leading>
-              {group ? <GroupTile name={group.name} size={40} /> : <SoftIcon name="workspaces-outline" />}
-            </Leading>
-          }
-          title={group ? group.name : tr('expense.noGroup')}
-          subtitle={tr('expense.group')}
-          chevron
-          divider
+      {/* Details: one tap each, all on one line where they fit. */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: t.spacing.md }}>
+        <DetailPill
+          leading={group ? <GroupTile name={group.name} size={22} /> : <Icon name="workspaces-outline" size={16} color={t.colors.textSecondary} />}
+          label={group ? group.name : tr('expense.noGroup')}
+          accessibilityLabel={`${tr('expense.group')}: ${group ? group.name : tr('expense.noGroup')}`}
           onPress={() => setSheet('group')}
         />
-        <ListRow
-          leading={
-            <Leading>
-              <Avatar name={payer.name} uri={payer.avatarUrl} size="md" />
-            </Leading>
-          }
-          title={payer.id === me.id ? tr('expense.youPaid') : tr('expense.theyPaid', { name: firstName(payer.name) })}
-          subtitle={tr('expense.paidBy')}
-          chevron
-          divider
+        <DetailPill
+          leading={<Avatar name={payer.name} uri={payer.avatarUrl} size="xs" />}
+          label={payer.id === me.id ? tr('expense.youPaid') : tr('expense.theyPaid', { name: firstName(payer.name) })}
+          accessibilityLabel={`${tr('expense.paidBy')}: ${youOr(payer)}`}
           onPress={() => setSheet('payer')}
         />
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12 }}>
-          <Leading>
-            <SoftIcon name="event" />
-          </Leading>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text variant="caption" tone="tertiary" style={{ marginBottom: 8 }}>
-              {tr('expense.when')}
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <Chip label={tr('date.today')} selected={sameDay(day, today)} onPress={() => setDay(today)} />
-              <Chip label={tr('date.yesterday')} selected={sameDay(day, yesterday)} onPress={() => setDay(yesterday)} />
-              <Chip
-                icon="calendar-today"
-                label={isCustomDay ? formatSmartDate(day) : tr('date.pickDate')}
-                selected={isCustomDay}
-                onPress={() => setSheet('date')}
-              />
-            </View>
-          </View>
+        <DetailPill
+          leading={<Icon name="event" size={16} color={t.colors.textSecondary} />}
+          label={formatSmartDate(day)}
+          accessibilityLabel={`${tr('expense.when')}: ${formatSmartDate(day)}`}
+          onPress={() => setSheet('date')}
+        />
+        <DetailPill
+          leading={<Icon name="notes" size={16} color={notes ? t.colors.primary : t.colors.textSecondary} />}
+          label={notes ? notes.split('\n')[0] : tr('expense.note')}
+          accessibilityLabel={notes ? `${tr('expense.notes')}: ${notes}` : tr('expense.addNote')}
+          onPress={() => setSheet('notes')}
+        />
+      </View>
+
+      {/* Who's in: tap a face to add or drop them. Amounts, percent and shares live under Adjust. */}
+      <Card padding={14} style={{ marginTop: t.spacing.base }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text variant="label" tone="secondary">
+            {tr('expense.splitBetween')}
+          </Text>
+          {people.length > 2 ? (
+            <Pressable
+              hitSlop={10}
+              accessibilityRole="button"
+              onPress={() => setParticipantIds(allSelected ? new Set([me.id]) : new Set(people.map((p) => p.id)))}
+            >
+              <Text variant="label" tone="primary">
+                {allSelected ? tr('expense.justMe') : tr('expense.selectAll')}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          style={{ flexGrow: 0, marginTop: 10, marginHorizontal: -14 }}
+          contentContainerStyle={{ gap: 4, paddingHorizontal: 10 }}
+        >
+          {people.map((p) => (
+            <PersonToggle key={p.id} user={p} label={p.id === me.id ? tr('common.you') : firstName(p.name)} selected={participantIds.has(p.id)} onPress={() => toggle(p.id)} />
+          ))}
+        </ScrollView>
+        <View style={{ height: 1, backgroundColor: t.colors.border, marginVertical: 12 }} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Text variant="label" tone={splitSummary.tone} numberOfLines={2} style={{ flex: 1 }}>
+            {splitSummary.text}
+          </Text>
+          <Button title={tr('expense.adjust')} icon="tune" size="sm" variant="secondary" onPress={() => setSheet('split')} disabled={participants.length === 0} />
         </View>
       </Card>
 
-      {/* Participants */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: t.spacing.lg, marginBottom: 10 }}>
-        <Text variant="h3">{tr('expense.splitBetween')}</Text>
-        {people.length > 2 ? (
-          <Pressable
-            hitSlop={10}
-            accessibilityRole="button"
-            onPress={() => setParticipantIds(allSelected ? new Set([me.id]) : new Set(people.map((p) => p.id)))}
-          >
-            <Text variant="label" tone="primary">
-              {allSelected ? tr('expense.justMe') : tr('expense.selectAll')}
-            </Text>
-          </Pressable>
-        ) : null}
-      </View>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {people.map((p) => (
-          <Chip
-            key={p.id}
-            label={p.id === me.id ? tr('common.you') : firstName(p.name)}
-            selected={participantIds.has(p.id)}
-            onPress={() => toggle(p.id)}
-            leading={<Avatar name={p.name} uri={p.avatarUrl} size="xs" />}
-          />
-        ))}
-      </View>
-
-      <SegmentedControl
-        style={{ marginTop: t.spacing.base }}
-        value={splitMode}
-        onChange={setSplitMode}
-        options={SPLIT_MODES.map((s) => ({ value: s.value, label: tr(s.labelKey) }))}
-      />
-      {splitMode === 'shares' ? (
-        <Text variant="caption" tone="tertiary" style={{ marginTop: 8 }}>
-          {tr('expense.sharesHint')}
-        </Text>
-      ) : null}
-
-      {/* Per-person breakdown */}
-      <Card style={{ marginTop: 12 }} padding={4}>
-        {participants.length === 0 ? (
-          <Text tone="tertiary" style={{ padding: 12 }}>
-            {tr('expense.pickOne')}
+      {/* ── Sheets ── */}
+      <BottomSheet visible={sheet === 'split'} onClose={() => setSheet(null)} title={tr('expense.howToSplit')}>
+        <SegmentedControl value={splitMode} onChange={setSplitMode} options={SPLIT_MODES.map((m) => ({ value: m.value, label: tr(m.labelKey) }))} />
+        {splitMode === 'shares' ? (
+          <Text variant="caption" tone="tertiary" style={{ marginTop: 8 }}>
+            {tr('expense.sharesHint')}
           </Text>
-        ) : (
-          participants.map((p, i) => {
-            const share = split?.isValid ? split.splits.find((s) => s.userId === p.id)?.amount : undefined;
+        ) : null}
+        <ScrollView style={{ maxHeight: 320, marginTop: 12 }} keyboardShouldPersistTaps="handled">
+          {participants.map((p, i) => {
+            const share = split?.isValid ? split.splits.find((x) => x.userId === p.id)?.amount : undefined;
             const name = youOr(p);
             return (
               <View
@@ -467,7 +451,6 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: 10,
-                  paddingHorizontal: 12,
                   paddingVertical: 10,
                   borderBottomWidth: i < participants.length - 1 ? 1 : 0,
                   borderBottomColor: t.colors.border,
@@ -478,7 +461,6 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
                   <Text variant="bodyStrong" numberOfLines={1}>
                     {name}
                   </Text>
-                  {/* Amounts appear once there's a valid split; until then the space stays empty. */}
                   {(splitMode === 'percentage' || splitMode === 'shares') && share !== undefined ? (
                     <Text variant="caption" tone="tertiary" tabular>
                       {formatCurrency(share, currency)}
@@ -498,7 +480,7 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
                       variant="surface"
                       size={34}
                       accessibilityLabel={tr('expense.removeShare', { name })}
-                      onPress={() => setShares((s) => ({ ...s, [p.id]: Math.max(0, sharesOf(p.id) - 1) }))}
+                      onPress={() => setShares((v) => ({ ...v, [p.id]: Math.max(0, sharesOf(p.id) - 1) }))}
                     />
                     <Text variant="bodyStrong" tabular align="center" style={{ minWidth: 28 }}>
                       {sharesOf(p.id)}
@@ -508,7 +490,7 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
                       variant="soft"
                       size={34}
                       accessibilityLabel={tr('expense.addShare', { name })}
-                      onPress={() => setShares((s) => ({ ...s, [p.id]: Math.min(99, sharesOf(p.id) + 1) }))}
+                      onPress={() => setShares((v) => ({ ...v, [p.id]: Math.min(99, sharesOf(p.id) + 1) }))}
                     />
                   </View>
                 ) : (
@@ -544,49 +526,66 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
                 )}
               </View>
             );
-          })
-        )}
-      </Card>
+          })}
+        </ScrollView>
+        {(splitMode === 'custom' || splitMode === 'percentage') && total > 0 ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 8 }}>
+            <Text variant="caption" tone={addsUp ? 'positive' : 'warning'} style={{ flexShrink: 1 }}>
+              {addsUp ? `✓ ${tr('expense.addsUp')}` : splitSummary.text}
+            </Text>
+            {remaining > 0.009 && participants.length > 0 ? (
+              <Pressable onPress={splitRest} hitSlop={8} accessibilityRole="button">
+                <Text variant="label" tone="primary">
+                  {tr('expense.splitRest')}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+        <Button title={tr('common.done')} fullWidth style={{ marginTop: t.spacing.base }} onPress={() => setSheet(null)} />
+      </BottomSheet>
 
-      {equalEach !== undefined ? (
-        <Text variant="caption" tone="tertiary" style={{ marginTop: 8 }}>
-          {tr('expense.each', { amount: formatCurrency(equalEach, currency) })}
-        </Text>
-      ) : null}
-      {(splitMode === 'custom' || splitMode === 'percentage') && total > 0 ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8 }}>
-          <Text variant="caption" tone={Math.abs(remaining) < 0.01 ? 'positive' : 'warning'} style={{ flexShrink: 1 }}>
-            {Math.abs(remaining) < 0.01
-              ? `✓ ${tr('expense.addsUp')}`
-              : splitMode === 'custom'
-                ? tr(remaining > 0 ? 'expense.leftToAssign' : 'expense.overTotal', { amount: formatCurrency(Math.abs(remaining), currency) })
-                : tr(remaining > 0 ? 'expense.leftToAssign' : 'expense.over100', { amount: `${Math.abs(remaining).toFixed(1)}%` })}
-          </Text>
-          {remaining > 0.009 && participants.length > 0 ? (
-            <Pressable onPress={splitRest} hitSlop={8} accessibilityRole="button">
-              <Text variant="label" tone="primary">
-                {tr('expense.splitRest')}
-              </Text>
-            </Pressable>
-          ) : null}
+      <BottomSheet visible={sheet === 'category'} onClose={() => setSheet(null)} title={tr('expense.category')}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {EXPENSE_CATEGORIES.map((c) => {
+            const active = c.id === category;
+            const col = categoryColor(c.id, t.isDark);
+            return (
+              <Pressable
+                key={c.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={tr(c.labelKey)}
+                onPress={() => {
+                  setCategory(c.id);
+                  setCategoryTouched(true);
+                  setSheet(null);
+                }}
+                style={{
+                  width: '23%',
+                  flexGrow: 1,
+                  alignItems: 'center',
+                  paddingVertical: 12,
+                  borderRadius: t.radius.md,
+                  borderWidth: 1.5,
+                  borderColor: active ? col : t.colors.border,
+                  backgroundColor: active ? col + (t.isDark ? '26' : '14') : t.colors.surface,
+                }}
+              >
+                <Text style={{ fontSize: 24, lineHeight: 30 }}>{c.emoji}</Text>
+                <Text variant="caption" numberOfLines={1} color={active ? col : t.colors.textSecondary} style={{ marginTop: 2, fontSize: 11 }}>
+                  {tr(c.shortKey)}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-      ) : null}
+      </BottomSheet>
 
-      {/* Notes stay tucked away until wanted. */}
-      {notesOpen || notes ? (
-        <Input
-          label={tr('expense.notes')}
-          value={notes}
-          onChangeText={setNotes}
-          placeholder={tr('expense.notesPlaceholder')}
-          autoFocus={notesOpen && !notes}
-          multiline
-          maxLength={1000}
-          containerStyle={{ marginTop: t.spacing.lg }}
-        />
-      ) : (
-        <Button title={tr('expense.addNote')} icon="notes" variant="ghost" onPress={() => setNotesOpen(true)} style={{ marginTop: t.spacing.base, alignSelf: 'flex-start' }} />
-      )}
+      <BottomSheet visible={sheet === 'notes'} onClose={() => setSheet(null)} title={tr('expense.notes')}>
+        <Input value={notes} onChangeText={setNotes} placeholder={tr('expense.notesPlaceholder')} multiline maxLength={1000} />
+        <Button title={tr('common.done')} fullWidth onPress={() => setSheet(null)} />
+      </BottomSheet>
 
       <BottomSheet visible={sheet === 'group'} onClose={() => setSheet(null)} title={tr('expense.chooseGroup')}>
         <ScrollView style={{ maxHeight: 420 }}>
@@ -664,6 +663,83 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
         }}
       />
     </Screen>
+  );
+};
+
+/** A compact tappable detail: "No group", "You paid", "Today", "Note". */
+const DetailPill: React.FC<{ leading: React.ReactNode; label: string; accessibilityLabel: string; onPress: () => void }> = ({
+  leading,
+  label,
+  accessibilityLabel,
+  onPress,
+}) => {
+  const t = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        height: 36,
+        maxWidth: '100%',
+        paddingLeft: 8,
+        paddingRight: 10,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: t.colors.border,
+        backgroundColor: t.colors.surface,
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      {leading}
+      <Text variant="label" numberOfLines={1} style={{ flexShrink: 1, maxWidth: 140 }}>
+        {label}
+      </Text>
+      <Icon name="expand-more" size={16} color={t.colors.textTertiary} />
+    </Pressable>
+  );
+};
+
+/** A face to tap in or out of the split. */
+const PersonToggle: React.FC<{ user: User; label: string; selected: boolean; onPress: () => void }> = ({ user, label, selected, onPress }) => {
+  const t = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={{ width: 60, alignItems: 'center' }}
+    >
+      <View style={{ padding: 2, borderRadius: 24, borderWidth: 2, borderColor: selected ? t.colors.primary : 'transparent', opacity: selected ? 1 : 0.45 }}>
+        <Avatar name={user.name} uri={user.avatarUrl} size="md" />
+      </View>
+      {selected ? (
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 8,
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            backgroundColor: t.colors.primary,
+            borderWidth: 2,
+            borderColor: t.colors.surface,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Icon name="check" size={10} color="#FFFFFF" />
+        </View>
+      ) : null}
+      <Text variant="caption" tone={selected ? 'default' : 'tertiary'} numberOfLines={1} style={{ marginTop: 4, maxWidth: 58 }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 };
 
