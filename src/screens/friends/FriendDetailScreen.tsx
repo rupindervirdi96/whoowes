@@ -6,7 +6,7 @@ import { useCurrentUser } from '../../hooks/useAuth';
 import { useExpenses } from '../../hooks/useExpenses';
 import { useSettlements } from '../../hooks/useSettlements';
 import { useBalancesWith } from '../../hooks/useBalances';
-import { useFriends, useRemoveFriend } from '../../hooks/useFriends';
+import { useAcceptFriendRequest, useAddFriend, useFriendRequests, useFriends, useRemoveFriend } from '../../hooks/useFriends';
 import { useFriendTogether } from '../../hooks/useFriendInsights';
 import { remindedRecently, useFriendActions } from '../../hooks/useFriendActions';
 import { ageLabel, daysSince, openSince, STALE_AFTER_DAYS } from '../../utils/friendInsights';
@@ -56,12 +56,18 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
   const first = firstName(name);
   const payments = settlements.filter((s) => s.fromUserId === friendId || s.toUserId === friendId);
   const isFriend = !!friends?.some((f) => f.friendId === friendId);
+  // Someone I only know through a group: offer to add them.
+  const { data: requests } = useFriendRequests();
+  const addFriend = useAddFriend();
+  const acceptRequest = useAcceptFriendRequest();
+  const theyAsked = requests?.incoming.find((r) => r.userId === friendId);
+  const iAsked = requests?.outgoing.some((r) => r.friendId === friendId);
 
   const owedToMe = balances.filter((b) => b.netBalance > 0);
   const iOwe = balances.filter((b) => b.netBalance < 0);
   const settled = balances.length === 0;
   const amounts = balances.map((b) => ({ currency: b.currency, amount: b.netBalance }));
-  const row = friend ? { friend, amounts, direction: 'settled' as const, since: null, stale: false } : null;
+  const row = friend ? { user: friend.friendUser, friend, amounts, direction: 'settled' as const, since: null, stale: false } : null;
 
   // How long the main balance has been open.
   const main0 = balances[0];
@@ -152,6 +158,27 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
           ) : null}
         </View>
       </View>
+
+      {!isFriend && friends && friendUser ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: t.spacing.lg }}>
+          <Text variant="caption" tone="tertiary" style={{ flex: 1 }}>
+            {tr('friend.notFriendHint')}
+          </Text>
+          {theyAsked ? (
+            <Button title={tr('common.accept')} size="sm" loading={acceptRequest.isPending} onPress={() => acceptRequest.mutate(theyAsked.id)} />
+          ) : (
+            <Button
+              title={iAsked ? tr('friend.requestSent') : tr('friend.addFriend')}
+              icon={iAsked ? 'check' : 'person-add-alt'}
+              size="sm"
+              variant="secondary"
+              disabled={iAsked}
+              loading={addFriend.isPending}
+              onPress={() => addFriend.mutate({ userId: friendId })}
+            />
+          )}
+        </View>
+      ) : null}
 
       <Card style={{ marginTop: t.spacing.xl }}>
         {settled ? (

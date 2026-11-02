@@ -10,6 +10,8 @@ interface IconButtonProps {
   variant?: 'surface' | 'soft' | 'primary' | 'ghost' | 'hero';
   size?: number;
   badge?: number;
+  /** Rounded square instead of a circle (header actions on tab screens). */
+  shape?: 'circle' | 'square';
   accessibilityLabel: string;
   style?: StyleProp<ViewStyle>;
 }
@@ -20,6 +22,7 @@ const IconButton: React.FC<IconButtonProps> = ({
   variant = 'surface',
   size = 44,
   badge,
+  shape = 'circle',
   accessibilityLabel,
   style,
 }) => {
@@ -43,7 +46,7 @@ const IconButton: React.FC<IconButtonProps> = ({
         {
           width: size,
           height: size,
-          borderRadius: size / 2,
+          borderRadius: shape === 'square' ? Math.round(size * 0.3) : size / 2,
           backgroundColor: map.bg,
           borderWidth: variant === 'surface' ? 1 : 0,
           borderColor: map.border,

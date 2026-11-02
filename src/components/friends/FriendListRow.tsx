@@ -3,14 +3,17 @@ import { View } from 'react-native';
 import { useTheme } from '../../theme';
 import { useT } from '../../i18n';
 import type { Friend } from '../../types';
-import type { FriendRowData } from '../../hooks/useFriendInsights';
+import type { FriendRowData, PersonRowData } from '../../hooks/useFriendInsights';
+import { useAddFriend } from '../../hooks/useFriends';
 import { useFriendActions } from '../../hooks/useFriendActions';
 import { ageLabel } from '../../utils/friendInsights';
+import { firstName } from '../../utils/money';
 import BalanceAmounts from '../BalanceAmounts';
 import Avatar from '../ui/Avatar';
+import IconButton from '../ui/IconButton';
 import Icon from '../ui/Icon';
 import ListRow from '../ui/ListRow';
-import SwipeRow, { type SwipeAction } from '../ui/SwipeRow';
+import SwipeRow, { type SwipeAction, type SwipeTrigger } from '../ui/SwipeRow';
 import Text from '../ui/Text';
 
 /** Pin and private nickname, after a friend's name. */
@@ -32,7 +35,7 @@ export const FriendNameTags: React.FC<{ friend: Friend }> = ({ friend }) => {
 };
 
 /** "Owes you · 6 weeks", "You owe", "Settled up". */
-function useStatusLine(row: FriendRowData) {
+function useStatusLine(row: PersonRowData) {
   const { t: tr } = useT();
   const status = {
     settled: tr('common.settledUp'),
@@ -51,19 +54,26 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   onLongPress: () => void;
   onSwiped: () => void;
+  /** Nudge this row once to show the swipe (first-time tip). */
+  peek?: boolean;
 }
 
-/** One friend: swipe right to add an expense, left to remind / settle up / pin. */
-const FriendListRow: React.FC<Props> = ({ row, divider, open, onOpenChange, onLongPress, onSwiped }) => {
+/** One friend: swipe right to start an expense with them, left to remind / settle up / pin. */
+const FriendListRow: React.FC<Props> = ({ row, divider, open, onOpenChange, onLongPress, onSwiped, peek }) => {
   const t = useTheme();
   const { t: tr } = useT();
   const actions = useFriendActions();
   const f = row.friend;
   const subtitle = useStatusLine(row);
 
-  const left: SwipeAction[] = [
-    { key: 'add', label: tr('friends.action.addExpense'), icon: 'add', color: t.colors.primary, onPress: () => actions.addExpense(f.friendId) },
-  ];
+  const name = firstName(f.friendUser.name);
+  const trigger: SwipeTrigger = {
+    icon: 'add-circle',
+    color: t.colors.primary,
+    label: tr('friends.swipe.addWith', { name }),
+    armedLabel: tr('friends.swipe.release', { name }),
+    onTrigger: () => actions.addExpense(f.friendId),
+  };
   const right: SwipeAction[] = [
     ...(actions.canRemind(row)
       ? [{ key: 'remind', label: tr('friends.action.remind'), icon: 'notifications-active', color: t.colors.warning, onPress: () => actions.remind(row) }]
@@ -81,15 +91,7 @@ const FriendListRow: React.FC<Props> = ({ row, divider, open, onOpenChange, onLo
   ];
 
   return (
-    <SwipeRow
-      left={left}
-      right={right}
-      open={open}
-      onOpenChange={(o) => {
-        onOpenChange(o);
-        if (o) onSwiped();
-      }}
-    >
+    <SwipeRow trigger={trigger} right={right} open={open} onOpenChange={onOpenChange} onSwipe={onSwiped} peek={peek}>
       <ListRow
         divider={divider}
         leading={<Avatar name={f.friendUser.name} uri={f.friendUser.avatarUrl} />}
@@ -106,3 +108,40 @@ const FriendListRow: React.FC<Props> = ({ row, divider, open, onOpenChange, onLo
 };
 
 export default FriendListRow;
+
+/**
+ * Someone I have money open with through a group, who isn't my friend:
+ * tap for their page, or add them as a friend right here.
+ */
+export const OtherPersonRow: React.FC<{ row: PersonRowData; divider: boolean; requested: boolean }> = ({ row, divider, requested }) => {
+  const t = useTheme();
+  const { t: tr } = useT();
+  const actions = useFriendActions();
+  const add = useAddFriend();
+  const subtitle = useStatusLine(row);
+  const sent = requested || add.isSuccess;
+  return (
+    <ListRow
+      divider={divider}
+      leading={<Avatar name={row.user.name} uri={row.user.avatarUrl} />}
+      title={row.user.name}
+      subtitle={subtitle}
+      subtitleTone={row.stale ? 'warning' : 'tertiary'}
+      onPress={() => actions.open(row.user.id)}
+      trailing={
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <BalanceAmounts amounts={row.amounts} />
+          <IconButton
+            icon={sent ? 'check' : 'person-add-alt'}
+            variant="soft"
+            shape="square"
+            size={34}
+            accessibilityLabel={sent ? tr('friend.requestSent') : tr('friends.addOther', { name: row.user.name })}
+            onPress={sent || add.isPending ? undefined : () => add.mutate({ userId: row.user.id })}
+            style={sent ? { backgroundColor: t.colors.surfaceAlt } : undefined}
+          />
+        </View>
+      }
+    />
+  );
+};
