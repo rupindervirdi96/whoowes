@@ -14,7 +14,7 @@ import { env } from '../env.js';
 
 export const legalRouter = Router();
 
-const UPDATED = 'October 30, 2026';
+const UPDATED = 'November 2, 2026';
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -74,18 +74,20 @@ legalRouter.get('/privacy', (_req, res) => {
   <li><strong>Your name</strong>, and an <strong>email address</strong> if you choose to add one.</li>
   <li><strong>What you put into the app</strong>: friends, groups, expenses, amounts, payments between friends, and payment reminders.</li>
   <li><strong>Receipts and Quick Add text.</strong> When you scan a receipt, the photo or PDF is sent to our AI provider to read the items and prices. We keep the items it read, not the photo. When you use Quick Add, we keep the text you typed.</li>
-  <li><strong>Subscription status</strong>: which plan you have and when it renews. Card and bank details are handled by Google Play (or Apple, or Stripe on the web) and never reach us.</li>
-  <li><strong>How many AI scans you used</strong> this month, to apply your plan's limits.</li>
+  <li><strong>How many times you used each AI feature</strong> this month, and the ads you watched to unlock more, so the free monthly allowance works. We count this on our server.</li>
   <li><strong>Your preferred currency</strong>, first set from your phone's region. The app's language is sent with each request so messages and AI notes come back in that language; we don't store it.</li>
 </ul>
+
+<h2>Ads</h2>
+<p>WhoOwes is free. Each AI feature has a few free uses a month; after that you can choose to watch a short video ad to unlock one more. Ads appear only when you ask for one, never in your lists or on other screens.</p>
+<p>The ads come from <strong>Google AdMob</strong>. To show and measure an ad, AdMob may collect your device's advertising ID, IP address, and information about your device and the ad. Where the law requires it (for example in the EEA, the UK and some US states), you're asked for consent before any ad loads, and can choose non-personalised ads. You can reset or delete your advertising ID, or opt out of personalised ads, in your phone's settings. We tell AdMob your WhoOwes user id and an ad session id only so it can confirm the ad was watched; we never give advertisers your expenses, contacts, receipts or phone number. See <a href="https://policies.google.com/technologies/ads">how Google uses information from apps that use its services</a>.</p>
 
 <h2>Why we use it (legal bases)</h2>
 <p>If you live in the European Economic Area, the United Kingdom or Switzerland, these are the legal grounds we rely on:</p>
 <ul>
-  <li><strong>To provide the app you signed up for</strong> (performance of a contract): your account, sign-in, expenses, groups, payments, reminders, receipt reading and subscriptions.</li>
+  <li><strong>To provide the app you signed up for</strong> (performance of a contract): your account, sign-in, expenses, groups, payments, reminders, receipt reading and the monthly AI allowance.</li>
   <li><strong>Legitimate interests</strong>: keeping the service secure, preventing abuse such as fake sign-ups and text-message fraud, and fixing problems.</li>
-  <li><strong>Your consent</strong>: checking your contacts, which you can stop at any time by turning off contacts access for WhoOwes in your phone's settings.</li>
-  <li><strong>Legal obligations</strong>: keeping billing records as tax and accounting rules require.</li>
+  <li><strong>Your consent</strong>: checking your contacts, which you can stop at any time by turning off contacts access for WhoOwes in your phone's settings; and personalised ads, where consent is required.</li>
 </ul>
 
 <h2>Contacts</h2>
@@ -93,8 +95,8 @@ legalRouter.get('/privacy', (_req, res) => {
 
 <h2>What we don't do</h2>
 <ul>
-  <li>We don't sell your information or share it for advertising.</li>
-  <li>The app has no ads and no third-party analytics or tracking.</li>
+  <li>We don't sell your information, and we never give advertisers what you put into the app.</li>
+  <li>Ads appear only when you choose to watch one. Apart from AdMob for those ads, the app has no third-party analytics or tracking.</li>
   <li>WhoOwes records who owes what; it doesn't move money or connect to your bank.</li>
 </ul>
 
@@ -105,7 +107,7 @@ legalRouter.get('/privacy', (_req, res) => {
   <li><strong>Anthropic</strong>: the AI that reads receipts and Quick Add text. Anthropic doesn't use this data to train its models.</li>
   <li><strong>MongoDB Atlas</strong> (hosted on Amazon Web Services in the United States): our database.</li>
   <li><strong>Render</strong> (United States): runs our server.</li>
-  <li><strong>Google Play, Apple and RevenueCat</strong>: handle subscriptions bought in the app. <strong>Stripe</strong> handles subscriptions bought on the web.</li>
+  <li><strong>Google AdMob</strong>: shows the optional ads that unlock extra AI uses (see Ads above).</li>
 </ul>
 <p>Your information is stored in the United States. All connections are encrypted (HTTPS).</p>
 
@@ -116,7 +118,7 @@ legalRouter.get('/privacy', (_req, res) => {
 <p>Friends and people in your groups see your name and the expenses and payments you share with them. People can find you by your exact phone number or email address, or by name if you're in a group together.</p>
 
 <h2>How long we keep it</h2>
-<p>We keep your information while you have an account. When you delete your account, we remove your name, phone number, email, friends list, reminders, receipt readings and Quick Add text right away. Expenses and payments you shared with others stay in their history, shown as "Deleted user", so their balances stay correct. Subscription records may be kept as long as tax and accounting rules require.</p>
+<p>We keep your information while you have an account. When you delete your account, we remove your name, phone number, email, friends list, reminders, receipt readings and Quick Add text right away. Expenses and payments you shared with others stay in their history, shown as "Deleted user", so their balances stay correct. Your AI usage counts are deleted too.</p>
 
 <h2>Deleting your account</h2>
 <p>In the app, open <strong>Account → Delete account</strong>. You can also ask us by email. See <a href="/delete-account">how to delete your account</a>.</p>
@@ -130,7 +132,7 @@ legalRouter.get('/privacy', (_req, res) => {
   <li>restrict or object to how we use it;</li>
   <li>withdraw consent you gave, such as contacts access, at any time.</li>
 </ul>
-<p>Email us at the address below and we'll answer within 30 days. We may need to confirm the request comes from your phone number. If you're unhappy with our answer, you can complain to your local data protection authority. We never sell personal information, and we don't "share" it for cross-context advertising.</p>
+<p>Email us at the address below and we'll answer within 30 days. We may need to confirm the request comes from your phone number. If you're unhappy with our answer, you can complain to your local data protection authority. We never sell personal information. The optional ads come from Google AdMob; you can opt out of personalised ads in your phone's settings.</p>
 
 <h2>Children</h2>
 <p>WhoOwes is meant for adults and isn't directed at children.</p>
@@ -170,20 +172,19 @@ legalRouter.get('/terms', (_req, res) => {
 <h2>AI features</h2>
 <p>Receipt scanning, Quick Add, the Split Assistant and spending insights use AI, which can make mistakes. Check amounts before you save an expense. You're responsible for what you save.</p>
 
-<h2>Subscriptions</h2>
+<h2>Free AI uses and ads</h2>
 <ul>
-  <li>WhoOwes Plus and Pro are optional subscriptions, billed monthly or yearly by Google Play (or Apple, or Stripe on the web) at the price shown before you buy.</li>
-  <li>They renew automatically until cancelled. Cancel at least 24 hours before renewal in Google Play → <em>Payments &amp; subscriptions → Subscriptions</em> (or your Apple ID settings). You keep the plan until the end of the period you paid for.</li>
-  <li>If a free trial is offered, you're charged when it ends unless you cancel before then.</li>
-  <li>Refunds follow the store's refund policy.</li>
-  <li>We may change prices for future billing periods; the store will tell you before a change applies.</li>
+  <li>WhoOwes is free. Each AI feature includes a few free uses every calendar month (UTC), counted on our server.</li>
+  <li>After that, you can watch a short rewarded ad to unlock one more use. An ad only counts once it has played in full.</li>
+  <li>Unlocked uses are for the month they're unlocked in. Unused free uses don't carry over.</li>
+  <li>Don't try to get around the limits (for example with scripts, fake ad views or extra accounts). We may change the allowance or the ad length, and limit how many ads can be watched in a day.</li>
 </ul>
 
 <h2>The service</h2>
 <p>We work to keep WhoOwes available and your data safe, but the app is provided "as is", without guarantees that it will always be available or error-free. We may change or discontinue features. To the extent the law allows, we aren't liable for indirect losses, or for disagreements between you and your friends about money.</p>
 
 <h2>Ending your account</h2>
-<p>You can delete your account at any time in <strong>Account → Delete account</strong>. Deleting the account doesn't cancel a Google Play or Apple subscription; cancel that in the store.</p>
+<p>You can delete your account at any time in <strong>Account → Delete account</strong>.</p>
 
 <h2>Changes</h2>
 <p>If we change these terms, we'll update the date at the top. Continuing to use the app after a change means you accept it.</p>
@@ -216,17 +217,14 @@ legalRouter.get('/delete-account', (_req, res) => {
   <li>Your name, phone number and email address</li>
   <li>Your friends list and payment reminders</li>
   <li>Receipt readings and Quick Add text</li>
+  <li>Your AI usage counts and ad unlocks</li>
   <li>Your membership of groups</li>
 </ul>
 
 <h2>What stays</h2>
 <ul>
   <li>Expenses and payments you shared with other people stay in their history, shown as "Deleted user", so their balances remain correct. They no longer include your name or number.</li>
-  <li>Subscription records may be kept as long as tax and accounting rules require.</li>
-</ul>
-
-<h2>Subscriptions</h2>
-<p>Deleting your account doesn't cancel a subscription bought through Google Play or Apple. Cancel it first in Google Play → <em>Payments &amp; subscriptions → Subscriptions</em> (or your Apple ID settings).</p>`,
+</ul>`,
     ),
   );
 });

@@ -1,7 +1,7 @@
 /**
  * Translated error messages. Routes throw (or send) the English text; the
  * response layer swaps in the user's language from the Accept-Language header.
- * Placeholders like {plan} are filled from the error's `params`.
+ * Placeholders like {limit} are filled from the error's `params`.
  */
 
 import type { Request } from 'express';
@@ -297,47 +297,36 @@ const MESSAGES: Record<string, Translations> = {
     es: 'Esa foto es demasiado grande. Prueba con una imagen más pequeña.',
     hi: 'यह फ़ोटो बहुत बड़ी है। छोटी फ़ोटो के साथ फिर कोशिश करें।',
   },
-  'This needs WhoOwes {plan}.': {
-    fr: 'Cette fonction nécessite WhoOwes {plan}.',
-    es: 'Esto requiere WhoOwes {plan}.',
-    hi: 'इसके लिए WhoOwes {plan} चाहिए।',
+  // ── AI passes and ads ──
+  "You've used this month's free AI uses. Watch a short ad to unlock one more.": {
+    fr: 'Vous avez utilisé les utilisations IA gratuites du mois. Regardez une courte pub pour en débloquer une de plus.',
+    es: 'Ya usaste los usos de IA gratis de este mes. Mira un anuncio corto para desbloquear uno más.',
+    hi: 'आपने इस महीने के मुफ़्त AI उपयोग कर लिए हैं। एक और अनलॉक करने के लिए छोटा विज्ञापन देखें।',
   },
-  "You've used all {limit} AI scans on {plan} this month.": {
-    fr: 'Vous avez utilisé vos {limit} scans IA du forfait {plan} ce mois-ci.',
-    es: 'Has usado los {limit} escaneos con IA de {plan} este mes.',
-    hi: 'इस महीने आपने {plan} के सभी {limit} AI स्कैन इस्तेमाल कर लिए हैं।',
+  "That's the most ads for today. Your free uses come back on the 1st.": {
+    fr: 'C’est le maximum de pubs pour aujourd’hui. Vos utilisations gratuites reviennent le 1er du mois.',
+    es: 'Es el máximo de anuncios por hoy. Tus usos gratis vuelven el día 1.',
+    hi: 'आज के लिए इतने ही विज्ञापन। आपके मुफ़्त उपयोग 1 तारीख़ को फिर मिलेंगे।',
   },
-
-  // ── Billing ──
-  'Payments are not set up on this server yet.': {
-    fr: 'Les paiements ne sont pas encore configurés sur ce serveur.',
-    es: 'Los pagos aún no están configurados en este servidor.',
-    hi: 'इस सर्वर पर भुगतान अभी सेट अप नहीं हैं।',
+  'That ad session has expired. Try again.': {
+    fr: 'Cette session de pub a expiré. Réessayez.',
+    es: 'Esa sesión de anuncio caducó. Inténtalo de nuevo.',
+    hi: 'यह विज्ञापन सत्र ख़त्म हो गया। फिर कोशिश करें।',
   },
-  'Payment provider error. Please try again.': {
-    fr: 'Erreur du prestataire de paiement. Réessayez.',
-    es: 'Error del proveedor de pagos. Inténtalo de nuevo.',
-    hi: 'भुगतान सेवा में गड़बड़ी। कृपया फिर कोशिश करें।',
+  'This ad has already unlocked a use.': {
+    fr: 'Cette pub a déjà débloqué une utilisation.',
+    es: 'Este anuncio ya desbloqueó un uso.',
+    hi: 'यह विज्ञापन पहले ही एक उपयोग अनलॉक कर चुका है।',
   },
-  'App store subscriptions are not set up on this server yet.': {
-    fr: 'Les abonnements via les boutiques d’applications ne sont pas encore configurés sur ce serveur.',
-    es: 'Las suscripciones de las tiendas de apps aún no están configuradas en este servidor.',
-    hi: 'इस सर्वर पर ऐप स्टोर सब्सक्रिप्शन अभी सेट अप नहीं हैं।',
+  'Almost there. Finish the ad to unlock.': {
+    fr: 'Presque fini. Terminez la pub pour débloquer.',
+    es: 'Casi listo. Termina el anuncio para desbloquear.',
+    hi: 'बस थोड़ा और। अनलॉक करने के लिए विज्ञापन पूरा करें।',
   },
-  "We couldn't check your subscription. Please try again.": {
-    fr: 'Impossible de vérifier votre abonnement. Réessayez.',
-    es: 'No pudimos comprobar tu suscripción. Inténtalo de nuevo.',
-    hi: 'आपका सब्सक्रिप्शन जाँच नहीं सके। कृपया फिर कोशिश करें।',
-  },
-  'Your subscription is billed by the app store. Change it from the app on your phone.': {
-    fr: 'Votre abonnement est facturé par la boutique d’applications. Modifiez-le depuis l’app sur votre téléphone.',
-    es: 'Tu suscripción la cobra la tienda de apps. Cámbiala desde la app en tu teléfono.',
-    hi: 'आपका सब्सक्रिप्शन ऐप स्टोर से बिल होता है। इसे अपने फ़ोन की ऐप से बदलें।',
-  },
-  'No billing account yet — pick a plan first.': {
-    fr: 'Pas encore de compte de facturation — choisissez d’abord un forfait.',
-    es: 'Aún no hay cuenta de facturación; elige primero un plan.',
-    hi: 'अभी कोई बिलिंग खाता नहीं है — पहले एक प्लान चुनें।',
+  'Waiting for the ad to be confirmed…': {
+    fr: 'En attente de la confirmation de la pub…',
+    es: 'Esperando la confirmación del anuncio…',
+    hi: 'विज्ञापन की पुष्टि का इंतज़ार…',
   },
 };
 

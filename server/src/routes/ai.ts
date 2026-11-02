@@ -1,59 +1,64 @@
 /**
- * AI routes. Plans and quotas are enforced here — never trust the client.
+ * AI routes. Every feature has a few free uses a month, then one use per watched
+ * ad (see aiPass.ts). Counted here by the server's clock — never trust the client.
  *
- *   POST /ai/receipts/parse       Free: 3/mo · Plus: 30/mo · Pro: unlimited
- *   POST /ai/expenses/quick-add   Plus, Pro
- *   POST /ai/receipts/assign      Pro
- *   POST /ai/insights             Pro
+ *   GET  /ai/pass                 what's left this month, per feature
+ *   POST /ai/ad/start             { feature }    → { sessionId, adSeconds }
+ *   POST /ai/ad/claim             { sessionId }  → the new pass status
+ *   POST /ai/receipts/parse       receipt_scan
+ *   POST /ai/expenses/quick-add   quick_add
+ *   POST /ai/receipts/assign      split_assistant
+ *   POST /ai/insights             insights (the same month's numbers again are free;
+ *                                 { cachedOnly: true } only returns an earlier one, or null)
+ *
+ * GET /ai/ad/ssv (AdMob's signed callback) is public and mounted in index.ts.
  */
 
-import { Router, type NextFunction, type Request, type Response } from 'express';
+import { createHash, randomUUID } from 'node:crypto';
+import { Router } from 'express';
 import { z } from 'zod';
 import { requireUser } from '../auth.js';
-import { PLANS, minPlanFor, planIncludes, type Feature } from '../plans.js';
-import { randomUUID } from 'node:crypto';
-import { planOf, recordScan, scansUsed } from '../store.js';
 import { db } from '../db/index.js';
+import { route } from '../domain/common.js';
+import { AI_FEATURES, claimAd, passStatus, startAd, takePass } from '../aiPass.js';
 import { IMAGE_TYPES, assignItems, monthlyInsights, parseReceipt, quickAdd } from '../ai/claude.js';
 import { langOf } from '../i18n.js';
 
 export const aiRouter = Router();
 aiRouter.use(requireUser);
 
-function gate(feature: Feature) {
-  return async (req: Request, res: Response, next: NextFunction) => {
-   try {
-    const plan = await planOf(req.user!.id);
-    if (!planIncludes(plan, feature)) {
-      return res.status(402).json({
-        code: 'upgrade_required',
-        feature,
-        message: 'This needs WhoOwes {plan}.',
-        params: { plan: PLANS[minPlanFor(feature)].name },
-      });
-    }
-    if (feature === 'receipt_scan') {
-      const limit = PLANS[plan].monthlyScanLimit;
-      if (limit !== null && (await scansUsed(req.user!.id)) >= limit) {
-        return res.status(402).json({
-          code: 'quota_exceeded',
-          feature,
-          message: "You've used all {limit} AI scans on {plan} this month.",
-          params: { limit, plan: PLANS[plan].name },
-        });
-      }
-    }
-    next();
-   } catch (err) {
-    next(err);
-   }
-  };
-}
-
 const MAX_BASE64 = Math.ceil((10 * 1024 * 1024 * 4) / 3); // 10 MB file
 
-aiRouter.post('/receipts/parse', gate('receipt_scan'), async (req, res, next) => {
-  try {
+// ─── Passes and ads ──────────────────────────────────────────────────────────
+
+aiRouter.get(
+  '/pass',
+  route(async (req, res) => {
+    res.json(await passStatus(req.user!.id));
+  }),
+);
+
+aiRouter.post(
+  '/ad/start',
+  route(async (req, res) => {
+    const { feature } = z.object({ feature: z.enum(AI_FEATURES as [string, ...string[]]) }).parse(req.body);
+    res.json(await startAd(req.user!.id, feature as (typeof AI_FEATURES)[number]));
+  }),
+);
+
+aiRouter.post(
+  '/ad/claim',
+  route(async (req, res) => {
+    const { sessionId } = z.object({ sessionId: z.string().uuid() }).parse(req.body);
+    res.json(await claimAd(req.user!.id, sessionId));
+  }),
+);
+
+// ─── Features ────────────────────────────────────────────────────────────────
+
+aiRouter.post(
+  '/receipts/parse',
+  route(async (req, res) => {
     const body = z
       .object({
         file: z.object({
@@ -71,8 +76,14 @@ aiRouter.post('/receipts/parse', gate('receipt_scan'), async (req, res, next) =>
     if (body.file.mediaType !== 'application/pdf' && bytes > 5 * 1024 * 1024) {
       return res.status(413).json({ message: 'That photo is too large. Try again with a smaller image.', code: 'file_too_large' });
     }
-    const receipt = await parseReceipt(body.file, body.instructions, langOf(req));
-    await recordScan(req.user!.id); // count only successful reads
+    const pass = await takePass(req.user!.id, 'receipt_scan');
+    let receipt;
+    try {
+      receipt = await parseReceipt(body.file, body.instructions, langOf(req));
+    } catch (err) {
+      await pass.refund(); // a failed read doesn't use up a scan
+      throw err;
+    }
     // Keep the parsed result so the review screen can reload it and the expense can link to it.
     const receiptId = randomUUID();
     await db.receipts.insertOne({
@@ -87,13 +98,12 @@ aiRouter.post('/receipts/parse', gate('receipt_scan'), async (req, res, next) =>
       createdAt: new Date(),
     });
     res.json({ ...receipt, receiptId });
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-aiRouter.post('/expenses/quick-add', gate('ai_quick_add'), async (req, res, next) => {
-  try {
+aiRouter.post(
+  '/expenses/quick-add',
+  route(async (req, res) => {
     const person = z.object({ id: z.string(), name: z.string().max(100) });
     const body = z
       .object({
@@ -105,14 +115,19 @@ aiRouter.post('/expenses/quick-add', gate('ai_quick_add'), async (req, res, next
         today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       })
       .parse(req.body);
-    res.json(await quickAdd({ ...body, language: langOf(req) }));
-  } catch (err) {
-    next(err);
-  }
-});
+    const pass = await takePass(req.user!.id, 'quick_add');
+    try {
+      res.json(await quickAdd({ ...body, language: langOf(req) }));
+    } catch (err) {
+      await pass.refund();
+      throw err;
+    }
+  }),
+);
 
-aiRouter.post('/receipts/assign', gate('ai_split_assistant'), async (req, res, next) => {
-  try {
+aiRouter.post(
+  '/receipts/assign',
+  route(async (req, res) => {
     const body = z
       .object({
         instruction: z.string().min(3).max(500),
@@ -120,16 +135,22 @@ aiRouter.post('/receipts/assign', gate('ai_split_assistant'), async (req, res, n
         people: z.array(z.object({ id: z.string(), name: z.string(), isMe: z.boolean().optional() })).max(50),
       })
       .parse(req.body);
-    res.json(await assignItems(body));
-  } catch (err) {
-    next(err);
-  }
-});
+    const pass = await takePass(req.user!.id, 'split_assistant');
+    try {
+      res.json(await assignItems(body));
+    } catch (err) {
+      await pass.refund();
+      throw err;
+    }
+  }),
+);
 
-aiRouter.post('/insights', gate('ai_insights'), async (req, res, next) => {
-  try {
-    const { stats } = z
+aiRouter.post(
+  '/insights',
+  route(async (req, res) => {
+    const { stats, cachedOnly } = z
       .object({
+        cachedOnly: z.boolean().optional(),
         stats: z.object({
           month: z.string(),
           // Older app versions don't send it; their amounts were always USD.
@@ -143,8 +164,24 @@ aiRouter.post('/insights', gate('ai_insights'), async (req, res, next) => {
         }),
       })
       .parse(req.body);
-    res.json(await monthlyInsights(stats, langOf(req)));
-  } catch (err) {
-    next(err);
-  }
-});
+    const me = req.user!.id;
+    const lang = langOf(req);
+    // Same month, same numbers, same language: hand back the earlier write-up for free.
+    const _id = `${me}:${stats.month}:${stats.currency}:${lang}`;
+    const statsHash = createHash('sha256').update(JSON.stringify(stats)).digest('hex');
+    const cached = await db.insightsCache.findOne({ _id, statsHash });
+    if (cached) return res.json(cached.result);
+    if (cachedOnly) return res.json(null);
+
+    const pass = await takePass(me, 'insights');
+    let result;
+    try {
+      result = await monthlyInsights(stats, lang);
+    } catch (err) {
+      await pass.refund();
+      throw err;
+    }
+    await db.insightsCache.updateOne({ _id }, { $set: { userId: me, statsHash, result, createdAt: new Date() } }, { upsert: true });
+    res.json(result);
+  }),
+);

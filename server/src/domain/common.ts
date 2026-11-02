@@ -9,9 +9,16 @@ import { db, type UserDoc } from '../db/index.js';
 /**
  * Throw from a route; the error handler turns it into JSON. Write the message in
  * English with {placeholders}; it is translated to the user's language on the way out.
+ * `data` is sent along as-is (e.g. { retryAfter: 12 }).
  */
-export function fail(status: number, message: string, code?: string, params?: Record<string, string | number>): never {
-  throw Object.assign(new Error(message), { status, code, params });
+export function fail(
+  status: number,
+  message: string,
+  code?: string,
+  params?: Record<string, string | number>,
+  data?: Record<string, unknown>,
+): never {
+  throw Object.assign(new Error(message), { status, code, params, data });
 }
 
 /** Wraps an async route so thrown errors reach Express. */

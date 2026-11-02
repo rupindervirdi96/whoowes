@@ -149,41 +149,48 @@ export interface ReceiptDoc {
   createdAt: Date;
 }
 
-/** A Google Play / App Store subscription, as last reported by RevenueCat. */
-export interface StoreSubscriptionDoc {
-  /** RevenueCat's store name, e.g. PLAY_STORE or APP_STORE. */
-  store: string;
-  productId: string;
-  plan: string;
-  status: string;
-  interval: string | null;
-  currentPeriodEnd: Date | null;
-  cancelAtPeriodEnd: boolean;
-  syncedAt: Date;
-}
+/** The AI features, each with its own free monthly allowance. */
+export type AIFeature = 'receipt_scan' | 'quick_add' | 'split_assistant' | 'insights';
 
-export interface BillingAccountDoc {
-  /** The user id. */
-  _id: string;
-  // Stripe (web) subscription.
-  stripeCustomerId: string | null;
-  subscriptionId: string | null;
-  plan: string;
-  status: string;
-  interval: string | null;
-  currentPeriodEnd: Date | null;
-  cancelAtPeriodEnd: boolean;
-  /** App store subscription (through RevenueCat), kept apart from the Stripe fields. */
-  store?: StoreSubscriptionDoc | null;
-  updatedAt: Date;
-}
-
+/** One user's AI use in one month (server time, UTC), so changing the phone's clock changes nothing. */
 export interface AiUsageDoc {
   /** `${userId}:${YYYY-MM}` */
   _id: string;
   userId: string;
   month: string;
-  scans: number;
+  /** Free uses taken, per feature. */
+  free?: Partial<Record<AIFeature, number>>;
+  /** Uses unlocked by watching an ad and not spent yet, per feature. */
+  unlocked?: Partial<Record<AIFeature, number>>;
+  /** Uses paid for with an ad, per feature (for the record). */
+  adUsed?: Partial<Record<AIFeature, number>>;
+}
+
+/**
+ * One rewarded ad. Started by the app, timed by the server: it only counts once
+ * enough server time has passed (and, when required, Google has confirmed it).
+ */
+export interface AdSessionDoc {
+  _id: string;
+  userId: string;
+  feature: AIFeature;
+  startedAt: Date;
+  /** When AdMob's server-side verification callback confirmed the reward. */
+  verifiedAt: Date | null;
+  /** AdMob's transaction id, so one reward can't be counted twice. */
+  transactionId: string | null;
+  claimedAt: Date | null;
+}
+
+/** A written AI insight, kept so looking at the same month again doesn't use up a pass. */
+export interface InsightsCacheDoc {
+  /** `${userId}:${month}:${currency}:${lang}` */
+  _id: string;
+  userId: string;
+  /** Hash of the numbers it was written from: new expenses mean a new write-up. */
+  statsHash: string;
+  result: { headline: string; highlights: string[]; tips: string[] };
+  createdAt: Date;
 }
 
 /** A phone that receives a user's push notifications. One user can have several. */
@@ -198,12 +205,6 @@ export interface PushTokenDoc {
   updatedAt: Date;
 }
 
-export interface ProcessedEventDoc {
-  /** The Stripe event id. */
-  _id: string;
-  processedAt: Date;
-}
-
 // ─── Connection ──────────────────────────────────────────────────────────────
 
 interface Collections {
@@ -214,9 +215,9 @@ interface Collections {
   settlements: Collection<SettlementDoc>;
   reminders: Collection<ReminderDoc>;
   receipts: Collection<ReceiptDoc>;
-  billingAccounts: Collection<BillingAccountDoc>;
   aiUsage: Collection<AiUsageDoc>;
-  processedEvents: Collection<ProcessedEventDoc>;
+  adSessions: Collection<AdSessionDoc>;
+  insightsCache: Collection<InsightsCacheDoc>;
   pushTokens: Collection<PushTokenDoc>;
 }
 
@@ -245,9 +246,13 @@ async function createIndexes(c: Collections) {
     c.reminders.createIndexes([{ key: { toUserId: 1, createdAt: -1 } }, { key: { fromUserId: 1, toUserId: 1, createdAt: -1 } }]),
     c.receipts.createIndexes([{ key: { userId: 1 } }]),
     c.pushTokens.createIndexes([{ key: { userId: 1 } }]),
-    c.billingAccounts.createIndexes([
-      { key: { stripeCustomerId: 1 }, unique: true, partialFilterExpression: { stripeCustomerId: { $type: 'string' } } },
+    // Ad sessions are only needed for a while; old ones clear themselves.
+    c.adSessions.createIndexes([
+      { key: { userId: 1, startedAt: -1 } },
+      { key: { transactionId: 1 }, unique: true, partialFilterExpression: { transactionId: { $type: 'string' } } },
+      { key: { startedAt: 1 }, expireAfterSeconds: 45 * 24 * 60 * 60 },
     ]),
+    c.insightsCache.createIndexes([{ key: { userId: 1 } }, { key: { createdAt: 1 }, expireAfterSeconds: 120 * 24 * 60 * 60 }]),
   ]);
 }
 
@@ -270,9 +275,9 @@ export async function initDb(): Promise<void> {
     settlements: d.collection<SettlementDoc>('settlements'),
     reminders: d.collection<ReminderDoc>('reminders'),
     receipts: d.collection<ReceiptDoc>('receipts'),
-    billingAccounts: d.collection<BillingAccountDoc>('billing_accounts'),
     aiUsage: d.collection<AiUsageDoc>('ai_usage'),
-    processedEvents: d.collection<ProcessedEventDoc>('processed_events'),
+    adSessions: d.collection<AdSessionDoc>('ad_sessions'),
+    insightsCache: d.collection<InsightsCacheDoc>('insights_cache'),
     pushTokens: d.collection<PushTokenDoc>('push_tokens'),
   };
   await createIndexes(collections);

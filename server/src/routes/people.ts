@@ -25,9 +25,6 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireUser } from '../auth.js';
 import { db, isDuplicateKey, type FriendshipDoc, type UserDoc } from '../db/index.js';
-import { stripe } from '../stripe.js';
-import { getAccount, saveAccount } from '../store.js';
-import { env } from '../env.js';
 import {
   canSettleWith,
   escapeRegex,
@@ -130,12 +127,6 @@ peopleRouter.delete(
   '/me',
   route(async (req, res) => {
     const me = req.user!.id;
-    // Stop any paid subscription first so nobody is billed for a deleted account.
-    const account = await getAccount(me);
-    if (account.subscriptionId && env.STRIPE_SECRET_KEY && ['active', 'trialing', 'past_due'].includes(account.status)) {
-      await stripe().subscriptions.cancel(account.subscriptionId);
-      await saveAccount({ ...account, plan: 'free', status: 'canceled' });
-    }
     // Shared expenses and payments stay correct for everyone else, so the user is
     // anonymised rather than deleted: no name, number or email remains.
     await db.friendships.deleteMany(mine(me));
@@ -143,6 +134,9 @@ peopleRouter.delete(
     await db.reminders.deleteMany({ $or: [{ fromUserId: me }, { toUserId: me }] });
     // Receipt readings and Quick Add text are personal; the expenses made from them stay.
     await db.receipts.deleteMany({ userId: me });
+    await db.aiUsage.deleteMany({ userId: me });
+    await db.adSessions.deleteMany({ userId: me });
+    await db.insightsCache.deleteMany({ userId: me });
     await db.aiUsage.deleteMany({ userId: me });
     await db.pushTokens.deleteMany({ userId: me });
     // Google Play / App Store subscriptions can only be cancelled by the user in

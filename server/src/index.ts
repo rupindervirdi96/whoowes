@@ -1,23 +1,18 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { ZodError } from 'zod';
-import { devPlan, env, isProduction, revenueCatConfigured, reviewLogin, twilioConfigured } from './env.js';
+import { env, isProduction, reviewLogin, twilioConfigured } from './env.js';
 import { closeDb, initDb, pingDb } from './db/index.js';
-import { billingRouter } from './routes/billing.js';
 import { aiRouter } from './routes/ai.js';
 import { phoneRouter } from './routes/phone.js';
 import { peopleRouter } from './routes/people.js';
 import { moneyRouter } from './routes/money.js';
-import { stripeWebhook } from './routes/webhooks.js';
 import { legalRouter } from './routes/legal.js';
-import { revenueCatWebhook } from './revenuecat.js';
+import { admobCallback } from './aiPass.js';
 import { langOf, translate } from './i18n.js';
 
 const app = express();
 app.disable('x-powered-by');
-
-// Stripe signs the raw body — this route must be registered before express.json().
-app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhook);
 
 // CORS for the web build of the app. Auth uses bearer tokens (no cookies), so
 // allowing any origin doesn't expose sessions. Native apps don't use CORS at all.
@@ -54,20 +49,18 @@ app.get('/health', async (_req, res) => {
   res.status(database ? 200 : 503).json({
     ok: database,
     database,
-    stripe: !!env.STRIPE_SECRET_KEY,
-    webhooks: !!env.STRIPE_WEBHOOK_SECRET,
-    appStoreBilling: revenueCatConfigured && !!env.REVENUECAT_WEBHOOK_AUTH,
     reviewLogin: !!reviewLogin,
     ai: !!env.ANTHROPIC_API_KEY,
+    aiFreePerMonth: env.AI_FREE_PER_MONTH,
+    adVerification: env.ADMOB_SSV_REQUIRED ? 'admob' : 'timer',
     sms: twilioConfigured ? 'twilio' : isProduction ? 'off' : 'dev-code',
-    devPlan: devPlan ?? null,
   });
 });
 
 // Privacy policy, terms and account deletion pages (public, linked from the app and the store listing).
 app.use(legalRouter);
-app.post('/webhooks/revenuecat', revenueCatWebhook);
-app.use('/billing', billingRouter);
+// AdMob's signed "reward earned" callback. Public (Google calls it), so before the signed-in AI routes.
+app.get('/ai/ad/ssv', admobCallback);
 app.use('/ai', aiRouter);
 app.use('/auth/phone', phoneRouter);
 // Data routes (each requires a signed-in user).
@@ -101,25 +94,19 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     console.error('[ai] upstream error', err.status, err.message);
     return res.status(502).json({ message: 'The AI service had a problem. Please try again.', code: 'ai_upstream' });
   }
-  const e = err as { status?: number; statusCode?: number; code?: string; message?: string; type?: string; params?: Record<string, string | number> };
-  if (e?.type?.startsWith?.('Stripe')) {
-    console.error('[stripe]', e.message);
-    return res.status(502).json({ message: 'Payment provider error. Please try again.', code: 'billing_upstream' });
-  }
+  const e = err as { status?: number; statusCode?: number; code?: string; message?: string; params?: Record<string, string | number>; data?: Record<string, unknown> };
   const status = e?.status ?? e?.statusCode ?? 500;
   if (status >= 500) console.error(err);
-  res.status(status).json({ message: status >= 500 && !e?.code ? 'Something went wrong.' : e?.message, code: e?.code, params: e?.params });
+  res.status(status).json({ message: status >= 500 && !e?.code ? 'Something went wrong.' : e?.message, code: e?.code, params: e?.params, ...e?.data });
 });
 
 await initDb();
 
 const server = app.listen(env.PORT, () => {
   console.log(`WhoOwes API listening on :${env.PORT}`);
-  if (!env.STRIPE_SECRET_KEY) console.log('  ⚠ STRIPE_SECRET_KEY not set — billing routes will return 503');
   if (!env.ANTHROPIC_API_KEY) console.log('  ⚠ ANTHROPIC_API_KEY not set — AI routes will return 503');
-  if (!revenueCatConfigured) console.log('  ⚠ REVENUECAT_SECRET_KEY not set — Google Play / App Store subscriptions are off');
+  if (!env.ADMOB_SSV_REQUIRED) console.log(`  ⓘ Ad unlocks use the ${env.AD_UNLOCK_SECONDS}s server timer; set ADMOB_SSV_REQUIRED=true once AdMob verification is set up`);
   if (reviewLogin) console.log('  ⚠ Reviewer sign-in is on (REVIEW_PHONE)');
-  if (devPlan) console.log(`  ⚠ DEV_PLAN=${devPlan} — every user gets this plan (development only)`);
   if (!twilioConfigured) {
     console.log(
       isProduction
