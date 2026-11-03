@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
   ScrollView,
+  type ScrollViewInstance,
   StyleProp,
   View,
   ViewStyle,
@@ -24,6 +26,29 @@ interface ScreenProps {
   footer?: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   keyboard?: boolean;
+  /** For screens that scroll themselves (e.g. down to new comments). */
+  scrollRef?: React.Ref<ScrollViewInstance>;
+}
+
+/**
+ * Android draws apps edge to edge, so the window no longer shrinks for the
+ * keyboard. Screens that reach the bottom of the display get the keyboard's
+ * height as bottom padding instead, so footers (and the comment box) stay above it.
+ * React Native reports that height without the navigation bar, which the safe
+ * area already pads for. Tab screens end at the tab bar and are left alone.
+ */
+function useAndroidKeyboardInset(enabled: boolean) {
+  const [inset, setInset] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !enabled) return;
+    const show = Keyboard.addListener('keyboardDidShow', (e) => setInset(Math.max(0, Math.round(e.endCoordinates.height))));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setInset(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [enabled]);
+  return inset;
 }
 
 const Screen: React.FC<ScreenProps> = ({
@@ -36,12 +61,15 @@ const Screen: React.FC<ScreenProps> = ({
   footer,
   contentStyle,
   keyboard = true,
+  scrollRef,
 }) => {
   const t = useTheme();
+  const keyboardInset = useAndroidKeyboardInset(keyboard && edges.includes('bottom'));
   const padding = padded ? { paddingHorizontal: t.spacing.gutter } : null;
 
   const body = scroll ? (
     <ScrollView
+      ref={scrollRef}
       style={{ flex: 1 }}
       contentContainerStyle={[{ flexGrow: 1, paddingTop: t.spacing.md, paddingBottom: t.spacing['4xl'] }, padding, contentStyle]}
       keyboardShouldPersistTaps="handled"
@@ -81,12 +109,12 @@ const Screen: React.FC<ScreenProps> = ({
 
   return (
     <SafeAreaView edges={edges} style={{ flex: 1, backgroundColor: t.colors.background }}>
-      {keyboard ? (
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-        >
+      {keyboard && Platform.OS === 'android' ? (
+        <View style={{ flex: 1, paddingBottom: keyboardInset }}>
+          {inner}
+        </View>
+      ) : keyboard ? (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={64}>
           {inner}
         </KeyboardAvoidingView>
       ) : (
