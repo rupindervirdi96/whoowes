@@ -2,13 +2,22 @@
  * Mock Expenses Service.
  */
 
-import { Expense, CreateExpensePayload, ExpenseSplit } from '../../types';
+import { Expense, CreateExpensePayload, ExpenseSplit, ExpenseActivity, ExpenseReactionEmoji } from '../../types';
 import { generateId } from '../../utils/idGenerator';
 import { nowISO } from '../../utils/date';
 import { mockDelay } from './mockHelpers';
 import { db, findUser } from './db';
 
 const notFound = () => Promise.reject({ message: 'Expense not found', statusCode: 404 });
+
+/** Reactions and comments per expense (demo only, gone on restart). */
+const activityByExpense = new Map<string, ExpenseActivity>();
+const activityOf = (expenseId: string): ExpenseActivity => {
+  const a = activityByExpense.get(expenseId) ?? { reactions: [], comments: [] };
+  activityByExpense.set(expenseId, a);
+  return a;
+};
+const snapshot = (a: ExpenseActivity): ExpenseActivity => ({ reactions: [...a.reactions], comments: [...a.comments] });
 
 const ExpenseService = {
   async getExpenses(userId: string, groupId?: string): Promise<Expense[]> {
@@ -59,6 +68,7 @@ const ExpenseService = {
     await mockDelay(400);
     if (!db.expenses.some((e) => e.id === expenseId)) return notFound();
     db.expenses = db.expenses.filter((e) => e.id !== expenseId);
+    activityByExpense.delete(expenseId);
   },
 
   async markSplitPaid(expenseId: string, userId: string): Promise<Expense> {
@@ -71,6 +81,34 @@ const ExpenseService = {
       updatedAt: nowISO(),
     };
     return db.expenses[idx];
+  },
+
+  async getActivity(expenseId: string): Promise<ExpenseActivity> {
+    await mockDelay(200);
+    if (!db.expenses.some((e) => e.id === expenseId)) return notFound();
+    return snapshot(activityOf(expenseId));
+  },
+
+  async react(userId: string, expenseId: string, emoji: ExpenseReactionEmoji | null): Promise<ExpenseActivity> {
+    await mockDelay(200);
+    const a = activityOf(expenseId);
+    a.reactions = a.reactions.filter((r) => r.userId !== userId);
+    if (emoji) a.reactions.push({ userId, user: findUser(userId), emoji, updatedAt: nowISO() });
+    return snapshot(a);
+  },
+
+  async addComment(userId: string, expenseId: string, text: string): Promise<ExpenseActivity> {
+    await mockDelay(300);
+    const a = activityOf(expenseId);
+    a.comments.push({ id: generateId(), userId, user: findUser(userId), text: text.trim(), createdAt: nowISO() });
+    return snapshot(a);
+  },
+
+  async deleteComment(userId: string, expenseId: string, commentId: string): Promise<ExpenseActivity> {
+    await mockDelay(200);
+    const a = activityOf(expenseId);
+    a.comments = a.comments.filter((c) => !(c.id === commentId && c.userId === userId));
+    return snapshot(a);
   },
 };
 

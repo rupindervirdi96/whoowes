@@ -1,11 +1,11 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { ExpenseService, ReceiptService } from '../services';
 import { QUERY_KEYS } from '../constants';
-import { CreateExpensePayload } from '../types';
+import { CreateExpensePayload, ExpenseActivity, ExpenseReactionEmoji } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { useShowToast } from '../store/uiStore';
 import { invalidateMoney, MutationError } from './queryUtils';
-import { translate } from '../i18n';
+import { translate, type TKey } from '../i18n';
 
 export function useExpenses(groupId?: string) {
   const userId = useAuthStore((s) => s.user?.id ?? '');
@@ -68,4 +68,98 @@ export function useMarkSplitPaid() {
     },
     onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotUpdate'), 'error'),
   });
+}
+
+// ─── Reactions and comments ──────────────────────────────────────────────────
+
+/** While the expense is open, new reactions and comments show up within this long (push makes it instant). */
+const ACTIVITY_POLL = 15_000;
+
+/** Expense lists show comment counts: refresh them, but not every open conversation. */
+function refreshExpenseLists(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: QUERY_KEYS.EXPENSES, predicate: (q) => q.queryKey[1] !== 'activity' });
+}
+
+export function useExpenseActivity(expenseId: string, { live = true }: { live?: boolean } = {}) {
+  return useQuery({
+    queryKey: QUERY_KEYS.EXPENSE_ACTIVITY(expenseId),
+    queryFn: () => ExpenseService.getActivity(expenseId),
+    enabled: !!expenseId,
+    staleTime: 5_000,
+    refetchInterval: live ? ACTIVITY_POLL : false,
+  });
+}
+
+/** Writes to the activity show at once; the server's answer then replaces the guess (or the guess is undone). */
+function useActivityWrite<V>(
+  expenseId: string,
+  guess: (current: ExpenseActivity, vars: V) => ExpenseActivity,
+  call: (vars: V) => Promise<ExpenseActivity>,
+  failKey: TKey,
+  /** Comment counts in expense lists change with comments, not reactions. */
+  countsChange = false,
+) {
+  const queryClient = useQueryClient();
+  const showToast = useShowToast();
+  const key = QUERY_KEYS.EXPENSE_ACTIVITY(expenseId);
+  return useMutation({
+    mutationFn: call,
+    onMutate: async (vars: V) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const before = queryClient.getQueryData<ExpenseActivity>(key);
+      queryClient.setQueryData<ExpenseActivity>(key, guess(before ?? { reactions: [], comments: [] }, vars));
+      return { before };
+    },
+    onSuccess: (activity) => {
+      queryClient.setQueryData(key, activity);
+      if (countsChange) refreshExpenseLists(queryClient);
+    },
+    onError: (e: MutationError, _vars, ctx) => {
+      if (ctx?.before) queryClient.setQueryData(key, ctx.before);
+      showToast(e.message ?? translate(failKey), 'error');
+    },
+  });
+}
+
+export function useReactToExpense(expenseId: string) {
+  const me = useAuthStore((s) => s.user);
+  return useActivityWrite<ExpenseReactionEmoji | null>(
+    expenseId,
+    (a, emoji) => ({
+      ...a,
+      reactions: [
+        ...a.reactions.filter((r) => r.userId !== me?.id),
+        ...(emoji && me ? [{ userId: me.id, user: me, emoji, updatedAt: new Date().toISOString() }] : []),
+      ],
+    }),
+    (emoji) => ExpenseService.react(me?.id ?? '', expenseId, emoji),
+    'toast.couldNotUpdate',
+  );
+}
+
+export function useAddComment(expenseId: string) {
+  const me = useAuthStore((s) => s.user);
+  return useActivityWrite<string>(
+    expenseId,
+    (a, text) => ({
+      ...a,
+      comments: me
+        ? [...a.comments, { id: `sending-${Date.now()}`, userId: me.id, user: me, text: text.trim(), createdAt: new Date().toISOString(), sending: true }]
+        : a.comments,
+    }),
+    (text) => ExpenseService.addComment(me?.id ?? '', expenseId, text),
+    'comments.failed',
+    true,
+  );
+}
+
+export function useDeleteComment(expenseId: string) {
+  const me = useAuthStore((s) => s.user?.id ?? '');
+  return useActivityWrite<string>(
+    expenseId,
+    (a, commentId) => ({ ...a, comments: a.comments.filter((c) => c.id !== commentId) }),
+    (commentId) => ExpenseService.deleteComment(me, expenseId, commentId),
+    'toast.couldNotUpdate',
+    true,
+  );
 }

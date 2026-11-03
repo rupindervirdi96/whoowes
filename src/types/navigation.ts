@@ -37,7 +37,8 @@ export type RootStackParamList = {
 
   // Expenses
   ManualExpense: { groupId?: string; friendId?: string; draft?: QuickAddDraft } | undefined;
-  ExpenseDetail: { expenseId: string };
+  /** focus: 'comments' scrolls down to the conversation (opened from a comment notification). */
+  ExpenseDetail: { expenseId: string; focus?: 'comments' };
   ReceiptScan: { groupId?: string; source?: 'camera' | 'gallery' | 'pdf' } | undefined;
   ReceiptReview: { receiptId: string; groupId?: string };
   QuickAdd: { groupId?: string } | undefined;

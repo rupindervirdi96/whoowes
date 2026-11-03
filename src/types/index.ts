@@ -212,6 +212,35 @@ export interface Expense {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  /** How many comments it has (from the server; absent in the demo). */
+  commentCount?: number;
+}
+
+/** The faces people can react to an expense with (the server accepts the same set). */
+export const EXPENSE_REACTIONS = ['👍', '❤️', '😂', '😮', '🙏', '💸'] as const;
+export type ExpenseReactionEmoji = (typeof EXPENSE_REACTIONS)[number];
+
+export interface ExpenseReaction {
+  userId: string;
+  user: User;
+  emoji: ExpenseReactionEmoji;
+  updatedAt: string;
+}
+
+export interface ExpenseComment {
+  id: string;
+  userId: string;
+  user: User;
+  text: string;
+  createdAt: string;
+  /** Still on its way to the server (shown faded). */
+  sending?: boolean;
+}
+
+/** Reactions and comments under an expense, oldest comment first. */
+export interface ExpenseActivity {
+  reactions: ExpenseReaction[];
+  comments: ExpenseComment[];
 }
 
 export interface CreateExpensePayload {

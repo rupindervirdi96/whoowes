@@ -11,6 +11,8 @@ import type {
   CreateGroupPayload,
   CreateSettlementPayload,
   Expense,
+  ExpenseActivity,
+  ExpenseReactionEmoji,
   Friend,
   FriendPrefsPayload,
   Group,
@@ -92,6 +94,12 @@ export const LiveExpenseService = {
   createExpense: (_createdBy: string, payload: CreateExpensePayload) => post<Expense>('/expenses', payload),
   deleteExpense: (expenseId: string) => del(`/expenses/${expenseId}`),
   markSplitPaid: (expenseId: string, userId: string) => post<Expense>(`/expenses/${expenseId}/splits/${userId}/paid`),
+  getActivity: (expenseId: string) => get<ExpenseActivity>(`/expenses/${expenseId}/activity`),
+  react: async (_userId: string, expenseId: string, emoji: ExpenseReactionEmoji | null) =>
+    (await apiClient.put<ExpenseActivity>(`/expenses/${expenseId}/reaction`, { emoji })).data,
+  addComment: (_userId: string, expenseId: string, text: string) => post<ExpenseActivity>(`/expenses/${expenseId}/comments`, { text }),
+  deleteComment: async (_userId: string, expenseId: string, commentId: string) =>
+    (await apiClient.delete<ExpenseActivity>(`/expenses/${expenseId}/comments/${commentId}`)).data,
 };
 
 export const LiveSettlementService = {

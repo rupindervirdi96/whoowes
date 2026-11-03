@@ -17,8 +17,15 @@ export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 configureNotificationDisplay();
 
 /** Reloads what a notification is about, so open screens show it. */
-function refreshFor(queryClient: QueryClient, type: PushData['type'] | undefined) {
-  if (type === 'friend_request' || type === 'friend_accepted') {
+function refreshFor(queryClient: QueryClient, data: Partial<PushData> | undefined) {
+  const type = data?.type;
+  if (type === 'expense_comment' || type === 'expense_reaction') {
+    // The conversation, and the comment counts in expense lists; balances didn't change.
+    if (data?.expenseId) queryClient.invalidateQueries({ queryKey: QUERY_KEYS.EXPENSE_ACTIVITY(data.expenseId) });
+    if (type === 'expense_comment') {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.EXPENSES, predicate: (q) => q.queryKey[1] !== 'activity' });
+    }
+  } else if (type === 'friend_request' || type === 'friend_accepted') {
     invalidateFriendData(queryClient);
   } else if (type === 'reminder') {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.REMINDERS });
@@ -38,6 +45,10 @@ function openFor(data: Partial<PushData> | undefined) {
   switch (data.type) {
     case 'expense_added':
       if (data.expenseId) navigationRef.navigate('ExpenseDetail', { expenseId: data.expenseId });
+      break;
+    case 'expense_comment':
+    case 'expense_reaction':
+      if (data.expenseId) navigationRef.navigate('ExpenseDetail', { expenseId: data.expenseId, focus: 'comments' });
       break;
     case 'payment_recorded':
     case 'payment_confirmed':
@@ -92,7 +103,7 @@ export function usePushNotifications(navReady: boolean) {
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const sub = Notifications.addNotificationReceivedListener((n) => {
-      refreshFor(queryClient, (n.request.content.data as Partial<PushData> | undefined)?.type);
+      refreshFor(queryClient, n.request.content.data as Partial<PushData> | undefined);
     });
     return () => sub.remove();
   }, [queryClient]);
@@ -106,7 +117,7 @@ export function usePushNotifications(navReady: boolean) {
     const data = lastResponse.notification.request.content.data as Partial<PushData>;
     if (openFor(data)) {
       // It may have arrived while the app was closed, so nothing was reloaded yet.
-      refreshFor(queryClient, data.type);
+      refreshFor(queryClient, data);
       handled.current = id;
       Notifications.clearLastNotificationResponseAsync?.().catch(() => {});
     }

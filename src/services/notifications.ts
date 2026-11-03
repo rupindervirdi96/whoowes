@@ -31,7 +31,9 @@ export interface PushData {
     | 'added_to_group'
     | 'member_left'
     | 'removed_from_group'
-    | 'group_deleted';
+    | 'group_deleted'
+    | 'expense_comment'
+    | 'expense_reaction';
   expenseId?: string;
   settlementId?: string;
   groupId?: string;

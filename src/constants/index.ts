@@ -25,6 +25,8 @@ export const QUERY_KEYS = {
   EXPENSES: ['expenses'] as const,
   GROUP_EXPENSES: (groupId: string) => ['expenses', 'group', groupId] as const,
   EXPENSE: (id: string) => ['expenses', 'detail', id] as const,
+  /** Reactions and comments under an expense. */
+  EXPENSE_ACTIVITY: (id: string) => ['expenses', 'activity', id] as const,
   RECEIPT: (id: string) => ['receipts', id] as const,
   SETTLEMENTS: ['settlements'] as const,
   PENDING_SETTLEMENTS: ['settlements', 'pending'] as const,

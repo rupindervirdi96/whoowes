@@ -106,7 +106,7 @@ Expo Go is for testing. To give the app to others, build it with `EXPO_PUBLIC_AP
 
 ### Push notifications
 
-The server sends a notification when someone sends or accepts a friend request, adds an expense you're on (with what you owe or get back), reminds you to pay, records a payment to you, confirms or declines your payment, or adds you to a group. Tapping one opens that screen. They go through Expo's free push service (`server/src/push.ts`); the app registers each phone after sign-in (`src/services/notifications.ts`).
+The server sends a notification when someone sends or accepts a friend request, adds an expense you're on (with what you owe or get back), reminds you to pay, records a payment to you, confirms or declines your payment, adds you to a group, or comments on or reacts to an expense you're part of (everyone on it hears, except whoever did it). Tapping one opens that screen. They go through Expo's free push service (`server/src/push.ts`); the app registers each phone after sign-in (`src/services/notifications.ts`).
 
 They work in installed builds (APK, Play Store, TestFlight), not in Expo Go on Android. One-time setup:
 

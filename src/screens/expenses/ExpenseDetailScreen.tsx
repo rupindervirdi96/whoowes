@@ -1,8 +1,17 @@
-﻿import React, { useLayoutEffect } from 'react';
-import { View } from 'react-native';
+﻿import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import { View, type ScrollViewInstance } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../../theme';
 import { RootScreenProps } from '../../types/navigation';
-import { useExpense, useDeleteExpense, useMarkSplitPaid } from '../../hooks/useExpenses';
+import {
+  useAddComment,
+  useDeleteComment,
+  useDeleteExpense,
+  useExpense,
+  useExpenseActivity,
+  useMarkSplitPaid,
+  useReactToExpense,
+} from '../../hooks/useExpenses';
 import { useGroups } from '../../hooks/useGroups';
 import { useCurrentUser } from '../../hooks/useAuth';
 import { useShowModal } from '../../store/uiStore';
@@ -23,9 +32,12 @@ import CategoryIcon from '../../components/ui/CategoryIcon';
 import ListRow, { SectionHeader } from '../../components/ui/ListRow';
 import { SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
+import ReactionBar from '../../components/expenses/ReactionBar';
+import CommentList from '../../components/expenses/CommentList';
+import CommentComposer from '../../components/expenses/CommentComposer';
 
 const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route, navigation }) => {
-  const { expenseId } = route.params;
+  const { expenseId, focus } = route.params;
   const t = useTheme();
   const { t: tr } = useT();
   const me = useCurrentUser()!;
@@ -34,6 +46,28 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
   const del = useDeleteExpense();
   const markPaid = useMarkSplitPaid();
   const showModal = useShowModal();
+  const isFocused = useIsFocused();
+  const activityQ = useExpenseActivity(expenseId, { live: isFocused && !!expense });
+  const react = useReactToExpense(expenseId);
+  const addComment = useAddComment(expenseId);
+  const deleteComment = useDeleteComment(expenseId);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const activity = activityQ.data;
+  const comments = activity?.comments ?? [];
+
+  // Opened from a comment notification: go down to the conversation once it has loaded.
+  const scrolledFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (focus !== 'comments' || !activity || !expense || scrolledFor.current === expenseId) return;
+    scrolledFor.current = expenseId;
+    const id = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250);
+    return () => clearTimeout(id);
+  }, [focus, activity, expense, expenseId]);
+
+  const sendComment = (text: string, restore: () => void) => {
+    addComment.mutate(text, { onError: restore });
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+  };
 
   const canDelete = !!expense && (expense.createdBy === me.id || expense.paidBy === me.id);
 
@@ -81,7 +115,7 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
   const iPaid = expense.paidBy === me.id;
 
   return (
-    <Screen>
+    <Screen scrollRef={scrollRef} footer={<CommentComposer onSend={sendComment} />}>
       <View style={{ alignItems: 'center', paddingVertical: t.spacing.base }}>
         <CategoryIcon category={expense.category} size={64} />
         <Text variant="h2" align="center" style={{ marginTop: 12 }}>
@@ -100,6 +134,9 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
             tone={position.tone === 'positive' ? 'positive' : position.tone === 'negative' ? 'negative' : 'neutral'}
           />
         ) : null}
+        <View style={{ marginTop: t.spacing.base, alignSelf: 'stretch' }}>
+          <ReactionBar reactions={activity?.reactions ?? []} myId={me.id} onReact={(emoji) => react.mutate(emoji)} />
+        </View>
       </View>
 
       {mine && !iPaid && !mine.paid ? (
@@ -183,6 +220,26 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
         ) : null}
         {expense.description ? <ListRow title={tr('expenseDetail.notes')} subtitle={expense.description} /> : null}
       </Card>
+
+      <SectionHeader title={comments.length ? tr('comments.titleCount', { count: comments.length }) : tr('comments.title')} />
+      <Card padding={4} style={{ paddingHorizontal: 12 }}>
+        <CommentList
+          comments={comments}
+          myId={me.id}
+          onDelete={(cm) =>
+            showModal({
+              title: tr('comments.deleteTitle'),
+              body: tr('comments.deleteBody'),
+              confirmLabel: tr('common.delete'),
+              variant: 'danger',
+              onConfirm: () => deleteComment.mutate(cm.id),
+            })
+          }
+        />
+      </Card>
+      <Text variant="caption" tone="tertiary" style={{ marginTop: 8, marginHorizontal: 4 }}>
+        {tr('comments.notifyHint')}
+      </Text>
     </Screen>
   );
 };

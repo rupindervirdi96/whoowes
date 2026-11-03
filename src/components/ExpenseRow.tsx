@@ -30,11 +30,12 @@ const ExpenseRow: React.FC<ExpenseRowProps> = ({ expense, myId, divider }) => {
   const paidLine =
     expense.paidBy === myId ? tr('expenseRow.youPaid', { amount: total }) : tr('expenseRow.theyPaid', { name: firstName(expense.paidByUser.name), amount: total });
   const tone = mine.tone === 'tertiary' ? 'tertiary' : mine.tone;
+  const comments = expense.commentCount ?? 0;
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${expense.title}, ${total}, ${mine.label} ${share}`}
+      accessibilityLabel={`${expense.title}, ${total}, ${mine.label} ${share}${comments ? `, ${tr('expenseRow.comments', { count: comments })}` : ''}`}
       onPress={() => navigation.navigate('ExpenseDetail', { expenseId: expense.id })}
       style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, opacity: pressed ? 0.6 : 1 })}
     >
@@ -45,6 +46,14 @@ const ExpenseRow: React.FC<ExpenseRowProps> = ({ expense, myId, divider }) => {
             {expense.title}
           </Text>
           {expense.receiptId ? <Icon name="receipt-long" size={14} color={t.colors.textTertiary} /> : null}
+          {comments ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+              <Icon name="chat-bubble-outline" size={13} color={t.colors.textTertiary} />
+              <Text variant="caption" tone="tertiary" tabular>
+                {comments}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <Text variant="caption" tone="tertiary" numberOfLines={1} style={{ marginTop: 3 }}>
           {paidLine} · {formatSmartDate(expense.date)}
