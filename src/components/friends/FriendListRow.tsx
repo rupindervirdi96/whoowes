@@ -70,6 +70,7 @@ const FriendListRow: React.FC<Props> = ({ row, divider, open, onOpenChange, onLo
   const trigger: SwipeTrigger = {
     icon: 'add-circle',
     color: t.colors.primary,
+    textColor: t.colors.textOnPrimary,
     label: tr('friends.swipe.addWith', { name }),
     armedLabel: tr('friends.swipe.release', { name }),
     onTrigger: () => actions.addExpense(f.friendId),
@@ -86,6 +87,8 @@ const FriendListRow: React.FC<Props> = ({ row, divider, open, onOpenChange, onLo
       label: f.pinned ? tr('friends.action.unpin') : tr('friends.action.pin'),
       icon: 'push-pin',
       color: t.colors.textSecondary,
+      // Light grey in dark mode, so dark text reads better on it.
+      textColor: t.isDark ? t.colors.background : '#FFFFFF',
       onPress: () => actions.togglePin(f),
     },
   ];

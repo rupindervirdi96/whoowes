@@ -3,7 +3,7 @@
  *
  * - `useTheme()` returns the active palette and helpers.
  * - `makeStyles(fn)` builds a hook that memoizes a StyleSheet per theme.
- * The user's choice (system / light / dark) lives in the UI store and is persisted.
+ * The user's choices (system / light / dark, and a colour theme) live in the UI store and are persisted.
  */
 
 import React, { createContext, useContext, useMemo } from 'react';
@@ -11,17 +11,17 @@ import { StyleSheet, useColorScheme, type ImageStyle, type TextStyle, type ViewS
 import { useUIStore } from '../store/uiStore';
 import {
   Brand,
-  DarkPalette,
   Fonts,
-  LightPalette,
   Palette,
   Radius,
   Spacing,
   TypeScale,
   elevation,
 } from './tokens';
+import { COLOR_SCHEMES, DEFAULT_COLOR_THEME, schemeById, type ColorThemeId } from './schemes';
 
 export * from './tokens';
+export { COLOR_SCHEMES, type ColorThemeId } from './schemes';
 
 export interface Theme {
   colors: Palette;
@@ -34,8 +34,7 @@ export interface Theme {
   elevation: (level: 1 | 2 | 3) => object;
 }
 
-function buildTheme(isDark: boolean): Theme {
-  const colors = isDark ? DarkPalette : LightPalette;
+function buildTheme(colors: Palette, isDark: boolean): Theme {
   return {
     colors,
     isDark,
@@ -48,16 +47,22 @@ function buildTheme(isDark: boolean): Theme {
   };
 }
 
-const LIGHT = buildTheme(false);
-const DARK = buildTheme(true);
+/** Every theme, built once: `${colourTheme}:light` / `${colourTheme}:dark`. */
+const THEMES = new Map<string, Theme>();
+for (const s of COLOR_SCHEMES) {
+  THEMES.set(`${s.id}:light`, buildTheme(s.light, false));
+  THEMES.set(`${s.id}:dark`, buildTheme(s.dark, true));
+}
+const themeFor = (id: ColorThemeId, isDark: boolean) => THEMES.get(`${schemeById(id).id}:${isDark ? 'dark' : 'light'}`)!;
 
-const ThemeContext = createContext<Theme>(LIGHT);
+const ThemeContext = createContext<Theme>(themeFor(DEFAULT_COLOR_THEME, false));
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const system = useColorScheme();
   const preference = useUIStore((s) => s.themePreference);
+  const colorTheme = useUIStore((s) => s.colorTheme);
   const isDark = preference === 'system' ? system === 'dark' : preference === 'dark';
-  return <ThemeContext.Provider value={isDark ? DARK : LIGHT}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={themeFor(colorTheme, isDark)}>{children}</ThemeContext.Provider>;
 };
 
 export function useTheme(): Theme {

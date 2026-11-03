@@ -733,7 +733,7 @@ const PersonToggle: React.FC<{ user: User; label: string; selected: boolean; onP
             justifyContent: 'center',
           }}
         >
-          <Icon name="check" size={10} color="#FFFFFF" />
+          <Icon name="check" size={10} color={t.colors.textOnPrimary} />
         </View>
       ) : null}
       <Text variant="caption" tone={selected ? 'default' : 'tertiary'} numberOfLines={1} style={{ marginTop: 4, maxWidth: 58 }}>

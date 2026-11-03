@@ -60,7 +60,7 @@ const BalanceHero: React.FC<BalanceHeroProps> = ({ totals, currency, onSettleUp 
             <Text variant="caption" tone="heroMuted">
               {tr('hero.owedToYou')}
               {'  '}
-              <Text variant="caption" weight="bold" color={t.brand.citrus} tabular>
+              <Text variant="caption" weight="bold" color={t.colors.accent} tabular>
                 {money(main.totalOwed)}
               </Text>
             </Text>
@@ -75,7 +75,7 @@ const BalanceHero: React.FC<BalanceHeroProps> = ({ totals, currency, onSettleUp 
           {others.map((o) => (
             <Text key={o.currency} variant="caption" tone="heroMuted" style={{ marginTop: 6 }}>
               {o.netBalance > 0 ? tr('hero.alsoOwed') : tr('hero.alsoOwe')}{' '}
-              <Text variant="caption" weight="bold" color={o.netBalance > 0 ? t.brand.citrus : '#FFC2C4'} tabular>
+              <Text variant="caption" weight="bold" color={o.netBalance > 0 ? t.colors.accent : '#FFC2C4'} tabular>
                 {money(Math.abs(o.netBalance), o.currency)}
               </Text>
             </Text>

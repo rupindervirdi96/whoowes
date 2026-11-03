@@ -9,8 +9,10 @@ export interface SwipeAction {
   key: string;
   label: string;
   icon: string;
-  /** Background of the action; its text is white. */
+  /** Background of the action. */
   color: string;
+  /** Icon and text colour on it (white unless given). */
+  textColor?: string;
   onPress: () => void;
 }
 
@@ -18,6 +20,8 @@ export interface SwipeAction {
 export interface SwipeTrigger {
   icon: string;
   color: string;
+  /** Icon and text colour on it (white unless given). */
+  textColor?: string;
   /** Shown while dragging: "Add expense with Alex". */
   label: string;
   /** Shown once letting go would run it: "Let go to start". */
@@ -193,9 +197,9 @@ const SwipeRow: React.FC<SwipeRowProps> = ({ children, trigger, right = [], open
           ]}
         >
           <Animated.View style={{ transform: [{ scale: iconScale }] }}>
-            <Icon name={armed ? 'check-circle' : trigger.icon} size={22} color="#FFFFFF" />
+            <Icon name={armed ? 'check-circle' : trigger.icon} size={22} color={trigger.textColor ?? '#FFFFFF'} />
           </Animated.View>
-          <Text variant="label" color="#FFFFFF" numberOfLines={1} style={{ flexShrink: 1 }}>
+          <Text variant="label" color={trigger.textColor ?? '#FFFFFF'} numberOfLines={1} style={{ flexShrink: 1 }}>
             {armed ? trigger.armedLabel : trigger.label}
           </Text>
         </Animated.View>
@@ -218,8 +222,8 @@ const SwipeRow: React.FC<SwipeRowProps> = ({ children, trigger, right = [], open
                 opacity: pressed ? 0.85 : 1,
               })}
             >
-              <Icon name={a.icon} size={20} color="#FFFFFF" />
-              <Text variant="caption" color="#FFFFFF" numberOfLines={1} style={{ paddingHorizontal: 4 }}>
+              <Icon name={a.icon} size={20} color={a.textColor ?? '#FFFFFF'} />
+              <Text variant="caption" color={a.textColor ?? '#FFFFFF'} numberOfLines={1} style={{ paddingHorizontal: 4 }}>
                 {a.label}
               </Text>
             </Pressable>

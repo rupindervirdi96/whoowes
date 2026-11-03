@@ -23,6 +23,7 @@ import Icon from '../../components/ui/Icon';
 import Input from '../../components/ui/Input';
 import BottomSheet from '../../components/ui/BottomSheet';
 import { SegmentedControl } from '../../components/ui/Chip';
+import ThemePicker from '../../components/ThemePicker';
 import ListRow, { SectionHeader } from '../../components/ui/ListRow';
 import { LogoMark } from '../../components/ui/Logo';
 
@@ -98,6 +99,10 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
           { value: 'dark', label: tr('account.themeDark') },
         ]}
       />
+      <Text variant="label" tone="secondary" style={{ marginTop: t.spacing.lg, marginBottom: t.spacing.sm, marginHorizontal: 4 }}>
+        {tr('account.colorTheme')}
+      </Text>
+      <ThemePicker />
 
       <SectionHeader title={tr('account.money')} />
       <Card padding={4} style={{ paddingHorizontal: 12 }}>

@@ -87,7 +87,7 @@ function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                   ...(t.elevation(3) as object),
                 })}
               >
-                <Icon name="add" size={30} color="#FFFFFF" />
+                <Icon name="add" size={30} color={t.colors.textOnPrimary} />
               </Pressable>
             </View>
           );
