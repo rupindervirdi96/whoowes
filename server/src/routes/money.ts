@@ -34,7 +34,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireUser } from '../auth.js';
 import { db, type ExpenseDoc, type ReceiptDoc, type SettlementDoc } from '../db/index.js';
-import { areFriends, canSettleWith, canTransactWith, fail, isGroupMember, iso, mainBalance, myGroupIds, pairNet, route, toCents } from '../domain/common.js';
+import { areFriends, canSettleWith, canTransactWith, fail, getVisibleExpense, isGroupMember, iso, mainBalance, myGroupIds, pairNet, route, toCents } from '../domain/common.js';
 import { loadGroups, serializeExpenses, serializeSettlements } from '../domain/serialize.js';
 import { FALLBACK_CURRENCY, currencyCode } from '../currency.js';
 import { nameOf, notify, type PushItem } from '../push.js';
@@ -274,15 +274,6 @@ moneyRouter.delete(
 
 // ─── Expenses ────────────────────────────────────────────────────────────────
 
-/** I can see an expense if I paid, I'm in the split, or it's in one of my groups. */
-async function getVisibleExpense(id: string, me: string) {
-  const e = await db.expenses.findOne({ _id: id });
-  if (!e) fail(404, 'Expense not found.');
-  if (e.participants.includes(me)) return e;
-  if (e.groupId && (await isGroupMember(e.groupId, me))) return e;
-  fail(404, 'Expense not found.');
-}
-
 moneyRouter.get(
   '/expenses',
   route(async (req, res) => {
@@ -390,6 +381,7 @@ moneyRouter.delete(
     const e = await getVisibleExpense(String(req.params.id), me);
     if (e.createdBy !== me && e.paidBy !== me) fail(403, 'Only the person who added or paid for this can delete it.');
     await db.expenses.deleteOne({ _id: e._id });
+    await Promise.all([db.expenseComments.deleteMany({ expenseId: e._id }), db.expenseReactions.deleteMany({ expenseId: e._id })]);
     res.status(204).end();
   }),
 );

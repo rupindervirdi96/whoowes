@@ -176,6 +176,12 @@ const MESSAGES: Record<string, Translations> = {
 
   // ── Expenses ──
   'Expense not found.': { fr: 'Dépense introuvable.', es: 'Gasto no encontrado.', hi: 'खर्च नहीं मिला।' },
+  'Comment not found.': { fr: 'Commentaire introuvable.', es: 'Comentario no encontrado.', hi: 'टिप्पणी नहीं मिली।' },
+  'You’re commenting too fast. Try again in a minute.': {
+    fr: 'Vous commentez trop vite. Réessayez dans une minute.',
+    es: 'Estás comentando demasiado rápido. Inténtalo en un minuto.',
+    hi: 'आप बहुत तेज़ी से टिप्पणी कर रहे हैं। एक मिनट बाद फिर कोशिश करें।',
+  },
   'Each person can only appear once in the split.': {
     fr: 'Chaque personne ne peut apparaître qu’une fois dans le partage.',
     es: 'Cada persona solo puede aparecer una vez en la división.',

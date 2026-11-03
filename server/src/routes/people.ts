@@ -137,10 +137,10 @@ peopleRouter.delete(
     await db.aiUsage.deleteMany({ userId: me });
     await db.adSessions.deleteMany({ userId: me });
     await db.insightsCache.deleteMany({ userId: me });
-    await db.aiUsage.deleteMany({ userId: me });
     await db.pushTokens.deleteMany({ userId: me });
-    // Google Play / App Store subscriptions can only be cancelled by the user in
-    // the store; the app reminds them before deleting.
+    // Their comments and reactions go too.
+    await db.expenseComments.deleteMany({ userId: me });
+    await db.expenseReactions.deleteMany({ userId: me });
     await db.users.updateOne(
       { _id: me },
       {

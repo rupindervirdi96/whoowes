@@ -51,10 +51,16 @@ export async function loadGroups(ids: string[], viewer: string) {
 
 export async function serializeExpenses(docs: ExpenseDoc[], viewer: string) {
   if (docs.length === 0) return [];
-  const users = await usersById(
-    docs.flatMap((e) => [e.paidBy, ...e.splits.map((s) => s.userId)]),
-    viewer,
-  );
+  const [users, counts] = await Promise.all([
+    usersById(
+      docs.flatMap((e) => [e.paidBy, ...e.splits.map((s) => s.userId)]),
+      viewer,
+    ),
+    db.expenseComments
+      .aggregate<{ _id: string; n: number }>([{ $match: { expenseId: { $in: docs.map((e) => e._id) } } }, { $group: { _id: '$expenseId', n: { $sum: 1 } } }])
+      .toArray(),
+  ]);
+  const commentCount = new Map(counts.map((c) => [c._id, c.n]));
   const user = (id: string) => users.get(id) ?? deletedUser(id);
   return docs.map((e) => ({
     id: e._id,
@@ -80,6 +86,7 @@ export async function serializeExpenses(docs: ExpenseDoc[], viewer: string) {
     createdBy: e.createdBy,
     createdAt: iso(e.createdAt)!,
     updatedAt: iso(e.updatedAt)!,
+    commentCount: commentCount.get(e._id) ?? 0,
   }));
 }
 

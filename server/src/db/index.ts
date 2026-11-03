@@ -193,6 +193,28 @@ export interface InsightsCacheDoc {
   createdAt: Date;
 }
 
+/** A comment under an expense. */
+export interface ExpenseCommentDoc {
+  _id: string;
+  expenseId: string;
+  userId: string;
+  text: string;
+  createdAt: Date;
+}
+
+/** One person's reaction to an expense (one each; picking another replaces it). */
+export interface ExpenseReactionDoc {
+  /** `${expenseId}:${userId}` */
+  _id: string;
+  expenseId: string;
+  userId: string;
+  /** null once taken back; the record stays so taking it back and re-adding can't spam everyone. */
+  emoji: string | null;
+  updatedAt: Date;
+  /** When the others were last told about this person's reaction. */
+  notifiedAt: Date | null;
+}
+
 /** A phone that receives a user's push notifications. One user can have several. */
 export interface PushTokenDoc {
   /** The Expo push token, e.g. ExponentPushToken[xxxx]. */
@@ -219,6 +241,8 @@ interface Collections {
   adSessions: Collection<AdSessionDoc>;
   insightsCache: Collection<InsightsCacheDoc>;
   pushTokens: Collection<PushTokenDoc>;
+  expenseComments: Collection<ExpenseCommentDoc>;
+  expenseReactions: Collection<ExpenseReactionDoc>;
 }
 
 let client: MongoClient | null = null;
@@ -246,6 +270,8 @@ async function createIndexes(c: Collections) {
     c.reminders.createIndexes([{ key: { toUserId: 1, createdAt: -1 } }, { key: { fromUserId: 1, toUserId: 1, createdAt: -1 } }]),
     c.receipts.createIndexes([{ key: { userId: 1 } }]),
     c.pushTokens.createIndexes([{ key: { userId: 1 } }]),
+    c.expenseComments.createIndexes([{ key: { expenseId: 1, createdAt: 1 } }, { key: { userId: 1 } }]),
+    c.expenseReactions.createIndexes([{ key: { expenseId: 1 } }, { key: { userId: 1 } }]),
     // Ad sessions are only needed for a while; old ones clear themselves.
     c.adSessions.createIndexes([
       { key: { userId: 1, startedAt: -1 } },
@@ -279,6 +305,8 @@ export async function initDb(): Promise<void> {
     adSessions: d.collection<AdSessionDoc>('ad_sessions'),
     insightsCache: d.collection<InsightsCacheDoc>('insights_cache'),
     pushTokens: d.collection<PushTokenDoc>('push_tokens'),
+    expenseComments: d.collection<ExpenseCommentDoc>('expense_comments'),
+    expenseReactions: d.collection<ExpenseReactionDoc>('expense_reactions'),
   };
   await createIndexes(collections);
   console.log(`[db] ready (${label})`);

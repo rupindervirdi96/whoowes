@@ -86,6 +86,15 @@ export async function isGroupMember(groupId: string, userId: string) {
   return !!(await db.groups.findOne({ _id: groupId, 'members.userId': userId }, { projection: { _id: 1 } }));
 }
 
+/** I can see an expense if I paid, I'm in the split, or it's in one of my groups. */
+export async function getVisibleExpense(id: string, me: string) {
+  const e = await db.expenses.findOne({ _id: id });
+  if (!e) fail(404, 'Expense not found.');
+  if (e.participants.includes(me)) return e;
+  if (e.groupId && (await isGroupMember(e.groupId, me))) return e;
+  fail(404, 'Expense not found.');
+}
+
 /** Ids of the groups I'm in. */
 export async function myGroupIds(userId: string) {
   return (await db.groups.find({ 'members.userId': userId }, { projection: { _id: 1 } }).toArray()).map((g) => g._id);

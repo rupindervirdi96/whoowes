@@ -7,6 +7,7 @@ import { aiRouter } from './routes/ai.js';
 import { phoneRouter } from './routes/phone.js';
 import { peopleRouter } from './routes/people.js';
 import { moneyRouter } from './routes/money.js';
+import { expenseChatRouter } from './routes/expenseChat.js';
 import { legalRouter } from './routes/legal.js';
 import { admobCallback } from './aiPass.js';
 import { langOf, translate } from './i18n.js';
@@ -66,6 +67,7 @@ app.use('/auth/phone', phoneRouter);
 // Data routes (each requires a signed-in user).
 app.use(peopleRouter);
 app.use(moneyRouter);
+app.use(expenseChatRouter);
 
 app.use((_req, res) => res.status(404).json({ message: 'Not found' }));
 

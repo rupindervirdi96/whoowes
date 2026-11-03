@@ -31,7 +31,9 @@ export type PushKind =
   | 'added_to_group'
   | 'member_left'
   | 'removed_from_group'
-  | 'group_deleted';
+  | 'group_deleted'
+  | 'expense_comment'
+  | 'expense_reaction';
 
 /** Matches PushData in the app (src/services/notifications.ts): tells a tap which screen to open. */
 interface PushData {
@@ -46,7 +48,9 @@ interface PushData {
     | 'added_to_group'
     | 'member_left'
     | 'removed_from_group'
-    | 'group_deleted';
+    | 'group_deleted'
+    | 'expense_comment'
+    | 'expense_reaction';
   expenseId?: string;
   settlementId?: string;
   groupId?: string;
@@ -65,6 +69,10 @@ interface Params {
   currency?: string | null;
   /** Which way money is still open with the other person. */
   dir?: 'owesYou' | 'youOwe';
+  /** A comment's text. */
+  text?: string;
+  /** A reaction. */
+  emoji?: string;
 }
 
 export interface PushItem {
@@ -174,6 +182,18 @@ const TEXT: Record<PushKind, Record<Lang, Writer>> = {
     es: (p) => ({ title: `${p.name} eliminó “${p.group}”`, body: 'Sus gastos y saldos siguen en tu historial.' }),
     hi: (p) => ({ title: `${p.name} ने “${p.group}” मिटा दिया`, body: 'इसके ख़र्चे और बकाया आपके इतिहास में रहेंगे।' }),
   },
+  expense_comment: {
+    en: (p) => ({ title: `${p.name} commented on “${p.title}”`, body: p.text ?? '' }),
+    fr: (p) => ({ title: `${p.name} a commenté « ${p.title} »`, body: p.text ?? '' }),
+    es: (p) => ({ title: `${p.name} comentó en “${p.title}”`, body: p.text ?? '' }),
+    hi: (p) => ({ title: `${p.name} ने “${p.title}” पर टिप्पणी की`, body: p.text ?? '' }),
+  },
+  expense_reaction: {
+    en: (p) => ({ title: `${p.name} reacted ${p.emoji} to “${p.title}”`, body: p.group ? p.group : 'Tap to see the expense.' }),
+    fr: (p) => ({ title: `${p.name} a réagi ${p.emoji} à « ${p.title} »`, body: p.group ? p.group : 'Touchez pour voir la dépense.' }),
+    es: (p) => ({ title: `${p.name} reaccionó ${p.emoji} a “${p.title}”`, body: p.group ? p.group : 'Toca para ver el gasto.' }),
+    hi: (p) => ({ title: `${p.name} ने “${p.title}” पर ${p.emoji} प्रतिक्रिया दी`, body: p.group ? p.group : 'ख़र्चा देखने के लिए टैप करें।' }),
+  },
 };
 
 const CHANNEL: Record<PushKind, Channel> = {
@@ -183,6 +203,8 @@ const CHANNEL: Record<PushKind, Channel> = {
   member_left: 'social',
   removed_from_group: 'social',
   group_deleted: 'social',
+  expense_comment: 'social',
+  expense_reaction: 'social',
   expense_owe: 'money',
   expense_owed: 'money',
   reminder: 'money',
