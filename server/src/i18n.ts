@@ -176,6 +176,16 @@ const MESSAGES: Record<string, Translations> = {
 
   // ── Expenses ──
   'Expense not found.': { fr: 'Dépense introuvable.', es: 'Gasto no encontrado.', hi: 'खर्च नहीं मिला।' },
+  'Only the person who added or paid for this can edit it.': {
+    fr: 'Seule la personne qui a ajouté ou payé cette dépense peut la modifier.',
+    es: 'Solo quien añadió o pagó este gasto puede editarlo.',
+    hi: 'इसे सिर्फ़ वही बदल सकता है जिसने इसे जोड़ा या भुगतान किया।',
+  },
+  'Someone else just changed this expense. Open it again to see the latest.': {
+    fr: 'Quelqu’un vient de modifier cette dépense. Rouvrez-la pour voir la dernière version.',
+    es: 'Alguien acaba de cambiar este gasto. Ábrelo de nuevo para ver lo último.',
+    hi: 'किसी ने अभी यह ख़र्चा बदला है। ताज़ा जानकारी के लिए इसे फिर से खोलें।',
+  },
   'Comment not found.': { fr: 'Commentaire introuvable.', es: 'Comentario no encontrado.', hi: 'टिप्पणी नहीं मिली।' },
   'You’re commenting too fast. Try again in a minute.': {
     fr: 'Vous commentez trop vite. Réessayez dans une minute.',

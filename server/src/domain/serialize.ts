@@ -57,7 +57,7 @@ export async function serializeExpenses(docs: ExpenseDoc[], viewer: string) {
       viewer,
     ),
     db.expenseComments
-      .aggregate<{ _id: string; n: number }>([{ $match: { expenseId: { $in: docs.map((e) => e._id) } } }, { $group: { _id: '$expenseId', n: { $sum: 1 } } }])
+      .aggregate<{ _id: string; n: number }>([{ $match: { expenseId: { $in: docs.map((e) => e._id) }, edit: { $exists: false } } }, { $group: { _id: '$expenseId', n: { $sum: 1 } } }])
       .toArray(),
   ]);
   const commentCount = new Map(counts.map((c) => [c._id, c.n]));

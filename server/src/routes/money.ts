@@ -12,6 +12,7 @@
  *   GET    /expenses?groupId=               mine (payer or in the split); with groupId, every expense in that group
  *   GET    /expenses/:id
  *   POST   /expenses                        validated: participants, split totals, group membership
+ *   PATCH  /expenses/:id                    same body; (creator or payer); everyone on it is told
  *   DELETE /expenses/:id                    (creator or payer)
  *   POST   /expenses/:id/splits/:userId/paid   (payer, or that person)
  *
@@ -33,7 +34,7 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireUser } from '../auth.js';
-import { db, type ExpenseDoc, type ReceiptDoc, type SettlementDoc } from '../db/index.js';
+import { db, type ExpenseChange, type ExpenseDoc, type ReceiptDoc, type SettlementDoc } from '../db/index.js';
 import { areFriends, canSettleWith, canTransactWith, fail, getVisibleExpense, isGroupMember, iso, mainBalance, myGroupIds, pairNet, route, toCents } from '../domain/common.js';
 import { loadGroups, serializeExpenses, serializeSettlements } from '../domain/serialize.js';
 import { FALLBACK_CURRENCY, currencyCode } from '../currency.js';
@@ -298,49 +299,58 @@ moneyRouter.get(
   }),
 );
 
+const expenseBody = z.object({
+  groupId: z.string().optional(),
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(1000).optional(),
+  amount: money,
+  currency: currencyCode.optional(),
+  category: z.enum(CATEGORIES),
+  paidBy: z.string(),
+  splitType: z.enum(['equal', 'custom', 'percentage', 'item_based']),
+  splits: z.array(z.object({ userId: z.string(), amount: z.number().min(0), percentage: z.number().min(0).max(100).optional() })).min(1).max(100),
+  items: z
+    .array(z.object({ name: z.string().max(200), price: z.number(), quantity: z.number().int().min(1), assignedTo: z.array(z.string()) }))
+    .max(300)
+    .optional(),
+  receiptId: z.string().optional(),
+  date: z.string().datetime({ offset: true }).optional(),
+});
+type ExpenseBody = z.infer<typeof expenseBody>;
+
+/**
+ * The checks every new or edited expense must pass: everyone once, me on it,
+ * everyone allowed (same group, or friends / people I share a group with), and
+ * split amounts that add up to the total, to the cent. Returns the people on
+ * it and each share in cents.
+ */
+async function checkExpense(body: ExpenseBody, me: string) {
+  const splitIds = body.splits.map((s) => s.userId);
+  if (new Set(splitIds).size !== splitIds.length) fail(400, 'Each person can only appear once in the split.');
+  const people = new Set([body.paidBy, ...splitIds]);
+  if (!people.has(me)) fail(403, 'You can only add expenses you are part of.');
+
+  if (body.groupId) {
+    await requireMember(body.groupId, me);
+    for (const id of people) if (!(await isGroupMember(body.groupId, id))) fail(400, 'Everyone in the split must be in the group.');
+  } else {
+    for (const id of people) if (!(await canTransactWith(me, id))) fail(403, 'You can only split with friends or people in your groups.');
+  }
+
+  const total = toCents(body.amount);
+  const shares = body.splits.map((s) => ({ ...s, cents: toCents(s.amount) }));
+  const diff = total - shares.reduce((sum, s) => sum + s.cents, 0);
+  if (Math.abs(diff) > shares.length) fail(400, 'The split amounts don’t add up to the total.', 'split_mismatch');
+  if (diff !== 0) [...shares].sort((a, b) => b.cents - a.cents)[0].cents += diff; // absorb float rounding
+  return { people, total, shares };
+}
+
 moneyRouter.post(
   '/expenses',
   route(async (req, res) => {
     const me = req.user!.id;
-    const body = z
-      .object({
-        groupId: z.string().optional(),
-        title: z.string().trim().min(1).max(120),
-        description: z.string().trim().max(1000).optional(),
-        amount: money,
-        currency: currencyCode.optional(),
-        category: z.enum(CATEGORIES),
-        paidBy: z.string(),
-        splitType: z.enum(['equal', 'custom', 'percentage', 'item_based']),
-        splits: z.array(z.object({ userId: z.string(), amount: z.number().min(0), percentage: z.number().min(0).max(100).optional() })).min(1).max(100),
-        items: z
-          .array(z.object({ name: z.string().max(200), price: z.number(), quantity: z.number().int().min(1), assignedTo: z.array(z.string()) }))
-          .max(300)
-          .optional(),
-        receiptId: z.string().optional(),
-        date: z.string().datetime({ offset: true }).optional(),
-      })
-      .parse(req.body);
-
-    // Everyone involved, once each.
-    const splitIds = body.splits.map((s) => s.userId);
-    if (new Set(splitIds).size !== splitIds.length) fail(400, 'Each person can only appear once in the split.');
-    const people = new Set([body.paidBy, ...splitIds]);
-    if (!people.has(me)) fail(403, 'You can only add expenses you are part of.');
-
-    if (body.groupId) {
-      await requireMember(body.groupId, me);
-      for (const id of people) if (!(await isGroupMember(body.groupId, id))) fail(400, 'Everyone in the split must be in the group.');
-    } else {
-      for (const id of people) if (!(await canTransactWith(me, id))) fail(403, 'You can only split with friends or people in your groups.');
-    }
-
-    // Split amounts must add up to the total, to the cent.
-    const total = toCents(body.amount);
-    const shares = body.splits.map((s) => ({ ...s, cents: toCents(s.amount) }));
-    const diff = total - shares.reduce((sum, s) => sum + s.cents, 0);
-    if (Math.abs(diff) > shares.length) fail(400, 'The split amounts don’t add up to the total.', 'split_mismatch');
-    if (diff !== 0) [...shares].sort((a, b) => b.cents - a.cents)[0].cents += diff; // absorb float rounding
+    const body = expenseBody.parse(req.body);
+    const { people, total, shares } = await checkExpense(body, me);
 
     if (body.receiptId && !(await db.receipts.findOne({ _id: body.receiptId, userId: me }, { projection: { _id: 1 } }))) {
       fail(400, 'Receipt not found.');
@@ -373,6 +383,120 @@ moneyRouter.post(
     res.status(201).json((await serializeExpenses([expense], me))[0]);
   }),
 );
+
+/**
+ * Edit an expense (the person who added it, or who paid). Takes the same body as
+ * creating one and replaces it. Shares that stay the same keep their "paid back";
+ * a share that changes is open again. Everyone on it before or after is told what
+ * it means for them, and the change is noted in the expense's conversation.
+ */
+moneyRouter.patch(
+  '/expenses/:id',
+  route(async (req, res) => {
+    const me = req.user!.id;
+    const before = await getVisibleExpense(String(req.params.id), me);
+    if (before.createdBy !== me && before.paidBy !== me) fail(403, 'Only the person who added or paid for this can edit it.');
+    const body = expenseBody.omit({ receiptId: true, items: true }).parse(req.body);
+    const { people, total, shares } = await checkExpense(body, me);
+
+    const oldShare = new Map(before.splits.map((s) => [s.userId, s]));
+    const next: ExpenseDoc = {
+      ...before,
+      groupId: body.groupId ?? null,
+      title: body.title,
+      description: body.description ?? null,
+      amountCents: total,
+      currency: body.currency ?? before.currency,
+      category: body.category,
+      paidBy: body.paidBy,
+      splitType: body.splitType,
+      splits: shares.map((s) => {
+        const old = oldShare.get(s.userId);
+        const keepPaid = !!old?.paid && old.amountCents === s.cents && before.paidBy === body.paidBy;
+        return { userId: s.userId, amountCents: s.cents, percentage: s.percentage ?? null, paid: s.userId === body.paidBy || keepPaid };
+      }),
+      participants: [...people],
+      // Receipt lines stay as a record while the total still matches them.
+      items: total === before.amountCents ? before.items : null,
+      date: body.date ? new Date(body.date) : before.date,
+      updatedAt: new Date(),
+    };
+
+    const changes = expenseChanges(before, next);
+    if (changes.length === 0) return res.json((await serializeExpenses([before], me))[0]);
+
+    // Only replace it if nobody else changed it in the meantime.
+    const saved = await db.expenses.findOneAndReplace({ _id: before._id, updatedAt: before.updatedAt }, next, { returnDocument: 'after' });
+    if (!saved) fail(409, 'Someone else just changed this expense. Open it again to see the latest.');
+    for (const g of new Set([before.groupId, next.groupId])) if (g) await touchGroup(g);
+    await db.expenseComments.insertOne({ _id: randomUUID(), expenseId: next._id, userId: me, text: '', createdAt: next.updatedAt, edit: changes });
+    notify(await editNotifications(before, next, changes, me));
+    res.json((await serializeExpenses([saved], me))[0]);
+  }),
+);
+
+/** What an edit changed, for the expense's history and the notifications. */
+function expenseChanges(a: ExpenseDoc, b: ExpenseDoc): ExpenseChange[] {
+  const out: ExpenseChange[] = [];
+  if (a.title !== b.title) out.push({ field: 'title', from: a.title, to: b.title });
+  if (a.amountCents !== b.amountCents) out.push({ field: 'amount', from: a.amountCents, to: b.amountCents, currency: b.currency });
+  if (a.currency !== b.currency) out.push({ field: 'currency', from: a.currency, to: b.currency });
+  if (a.category !== b.category) out.push({ field: 'category', from: a.category, to: b.category });
+  if (a.date.getTime() !== b.date.getTime()) out.push({ field: 'date', from: a.date.toISOString(), to: b.date.toISOString() });
+  if (a.paidBy !== b.paidBy) out.push({ field: 'paidBy', from: a.paidBy, to: b.paidBy });
+  const shareKey = (e: ExpenseDoc) =>
+    [...e.splits]
+      .sort((x, y) => x.userId.localeCompare(y.userId))
+      .map((s) => `${s.userId}:${s.amountCents}`)
+      .join(',');
+  if (shareKey(a) !== shareKey(b)) out.push({ field: 'split' });
+  if ((a.description ?? '') !== (b.description ?? '')) out.push({ field: 'note' });
+  if ((a.groupId ?? null) !== (b.groupId ?? null)) out.push({ field: 'group', from: a.groupId ?? null, to: b.groupId ?? null });
+  return out;
+}
+
+/** What one person gets back (+) or owes (-) on an expense, in cents. */
+function standing(e: ExpenseDoc, userId: string) {
+  if (!e.participants.includes(userId)) return null;
+  const own = e.splits.find((s) => s.userId === userId)?.amountCents ?? 0;
+  return e.paidBy === userId ? e.amountCents - own : -own;
+}
+
+/**
+ * Who hears about an edit: everyone on it before or after, except whoever edited
+ * it. Each is told what it now means for them, or what changed if their share didn't.
+ */
+async function editNotifications(before: ExpenseDoc, after: ExpenseDoc, changes: ExpenseChange[], me: string): Promise<PushItem[]> {
+  const everyone = [...new Set([...before.participants, ...after.participants])].filter((id) => id !== me);
+  if (!everyone.length) return [];
+  const name = await nameOf(me);
+  const fields = [...new Set(changes.map((c) => c.field))];
+  return everyone.map((userId) => {
+    const was = standing(before, userId);
+    const now = standing(after, userId);
+    const sameDirection = was !== null && now !== null && Math.sign(was) === Math.sign(now) && was !== 0;
+    return {
+      userId,
+      kind: 'expense_edited' as const,
+      params: {
+        name,
+        title: after.title,
+        currency: after.currency,
+        fields,
+        ...(now === null
+          ? { role: 'removed' as const }
+          : now === was || now === 0
+            ? { role: 'same' as const }
+            : {
+                role: now > 0 ? ('owed' as const) : ('owe' as const),
+                cents: Math.abs(now),
+                ...(sameDirection ? { wasCents: Math.abs(was!) } : {}),
+              }),
+      },
+      data: { type: 'expense_edited' as const, expenseId: after._id },
+    };
+  });
+}
 
 moneyRouter.delete(
   '/expenses/:id',

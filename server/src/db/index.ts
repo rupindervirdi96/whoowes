@@ -193,13 +193,29 @@ export interface InsightsCacheDoc {
   createdAt: Date;
 }
 
-/** A comment under an expense. */
+/** One thing an edit changed. Amounts in cents; people and groups by id. */
+export type ExpenseChange =
+  | { field: 'title'; from: string; to: string }
+  | { field: 'amount'; from: number; to: number; currency: string }
+  | { field: 'currency'; from: string; to: string }
+  | { field: 'category'; from: string; to: string }
+  | { field: 'date'; from: string; to: string }
+  | { field: 'paidBy'; from: string; to: string }
+  | { field: 'split' }
+  | { field: 'note' }
+  | { field: 'group'; from: string | null; to: string | null };
+
+/**
+ * A comment under an expense, or (with `edit`) a note that someone edited it,
+ * so the conversation shows why balances moved. Edit notes can't be deleted.
+ */
 export interface ExpenseCommentDoc {
   _id: string;
   expenseId: string;
   userId: string;
   text: string;
   createdAt: Date;
+  edit?: ExpenseChange[];
 }
 
 /** One person's reaction to an expense (one each; picking another replaces it). */

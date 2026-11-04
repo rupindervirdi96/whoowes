@@ -33,7 +33,8 @@ export type PushKind =
   | 'removed_from_group'
   | 'group_deleted'
   | 'expense_comment'
-  | 'expense_reaction';
+  | 'expense_reaction'
+  | 'expense_edited';
 
 /** Matches PushData in the app (src/services/notifications.ts): tells a tap which screen to open. */
 interface PushData {
@@ -50,7 +51,8 @@ interface PushData {
     | 'removed_from_group'
     | 'group_deleted'
     | 'expense_comment'
-    | 'expense_reaction';
+    | 'expense_reaction'
+    | 'expense_edited';
   expenseId?: string;
   settlementId?: string;
   groupId?: string;
@@ -73,6 +75,11 @@ interface Params {
   text?: string;
   /** A reaction. */
   emoji?: string;
+  /** An edit: what it means for this person now, and what it was before (cents). */
+  role?: 'owe' | 'owed' | 'removed' | 'same';
+  wasCents?: number;
+  /** An edit: which parts changed (ExpenseChange fields). */
+  fields?: string[];
 }
 
 export interface PushItem {
@@ -95,7 +102,22 @@ function money(cents: number, currency: string, lang: Lang) {
 }
 
 type Text = { title: string; body: string };
-type Writer = (p: Params & { amount: string }) => Text;
+
+const FIELD: Record<Lang, Record<string, string>> = {
+  en: { title: 'title', amount: 'amount', currency: 'currency', category: 'category', date: 'date', paidBy: 'who paid', split: 'split', note: 'note', group: 'group' },
+  fr: { title: 'titre', amount: 'montant', currency: 'devise', category: 'catégorie', date: 'date', paidBy: 'payeur', split: 'répartition', note: 'note', group: 'groupe' },
+  es: { title: 'título', amount: 'importe', currency: 'moneda', category: 'categoría', date: 'fecha', paidBy: 'quién pagó', split: 'división', note: 'nota', group: 'grupo' },
+  hi: { title: 'शीर्षक', amount: 'रकम', currency: 'मुद्रा', category: 'श्रेणी', date: 'तारीख़', paidBy: 'किसने भुगतान किया', split: 'बँटवारा', note: 'नोट', group: 'ग्रुप' },
+};
+const AND: Record<Lang, string> = { en: 'and', fr: 'et', es: 'y', hi: 'और' };
+
+/** "amount, date and split" in the phone's language. */
+function fieldList(fields: string[] | undefined, lang: Lang) {
+  const names = (fields ?? []).map((f) => FIELD[lang][f] ?? f);
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} ${AND[lang]} ${names[names.length - 1]}`;
+}
+type Writer = (p: Params & { amount: string; was: string; changed: string }) => Text;
 
 const TEXT: Record<PushKind, Record<Lang, Writer>> = {
   friend_request: {
@@ -188,6 +210,52 @@ const TEXT: Record<PushKind, Record<Lang, Writer>> = {
     es: (p) => ({ title: `${p.name} comentó en “${p.title}”`, body: p.text ?? '' }),
     hi: (p) => ({ title: `${p.name} ने “${p.title}” पर टिप्पणी की`, body: p.text ?? '' }),
   },
+  expense_edited: {
+    en: (p) => ({
+      title: `${p.name} edited “${p.title}”`,
+      body:
+        p.role === 'removed'
+          ? 'You’re no longer on this expense.'
+          : p.role === 'owe'
+            ? `You now owe ${p.amount}${p.was ? ` (was ${p.was})` : ''}.`
+            : p.role === 'owed'
+              ? `You now get back ${p.amount}${p.was ? ` (was ${p.was})` : ''}.`
+              : `Changed the ${p.changed}.`,
+    }),
+    fr: (p) => ({
+      title: `${p.name} a modifié « ${p.title} »`,
+      body:
+        p.role === 'removed'
+          ? 'Vous ne faites plus partie de cette dépense.'
+          : p.role === 'owe'
+            ? `Vous devez maintenant ${p.amount}${p.was ? ` (au lieu de ${p.was})` : ''}.`
+            : p.role === 'owed'
+              ? `On vous doit maintenant ${p.amount}${p.was ? ` (au lieu de ${p.was})` : ''}.`
+              : `Modifié : ${p.changed}.`,
+    }),
+    es: (p) => ({
+      title: `${p.name} editó “${p.title}”`,
+      body:
+        p.role === 'removed'
+          ? 'Ya no formas parte de este gasto.'
+          : p.role === 'owe'
+            ? `Ahora debes ${p.amount}${p.was ? ` (antes ${p.was})` : ''}.`
+            : p.role === 'owed'
+              ? `Ahora te deben ${p.amount}${p.was ? ` (antes ${p.was})` : ''}.`
+              : `Cambió: ${p.changed}.`,
+    }),
+    hi: (p) => ({
+      title: `${p.name} ने “${p.title}” बदला`,
+      body:
+        p.role === 'removed'
+          ? 'अब आप इस ख़र्चे में शामिल नहीं हैं।'
+          : p.role === 'owe'
+            ? `अब आपको ${p.amount} देने हैं${p.was ? ` (पहले ${p.was})` : ''}।`
+            : p.role === 'owed'
+              ? `अब आपको ${p.amount} वापस मिलेंगे${p.was ? ` (पहले ${p.was})` : ''}।`
+              : `बदला गया: ${p.changed}।`,
+    }),
+  },
   expense_reaction: {
     en: (p) => ({ title: `${p.name} reacted ${p.emoji} to “${p.title}”`, body: p.group ? p.group : 'Tap to see the expense.' }),
     fr: (p) => ({ title: `${p.name} a réagi ${p.emoji} à « ${p.title} »`, body: p.group ? p.group : 'Touchez pour voir la dépense.' }),
@@ -204,6 +272,7 @@ const CHANNEL: Record<PushKind, Channel> = {
   removed_from_group: 'social',
   group_deleted: 'social',
   expense_comment: 'social',
+  expense_edited: 'money',
   expense_reaction: 'social',
   expense_owe: 'money',
   expense_owed: 'money',
@@ -214,9 +283,10 @@ const CHANNEL: Record<PushKind, Channel> = {
 };
 
 function write(item: PushItem, lang: Lang): Text {
-  const { cents, currency } = item.params;
+  const { cents, wasCents, currency, fields } = item.params;
   const amount = cents && currency ? money(cents, currency, lang) : '';
-  return TEXT[item.kind][lang]({ ...item.params, amount });
+  const was = wasCents && currency ? money(wasCents, currency, lang) : '';
+  return TEXT[item.kind][lang]({ ...item.params, amount, was, changed: fieldList(fields, lang) });
 }
 
 // ─── Sending ─────────────────────────────────────────────────────────────────
