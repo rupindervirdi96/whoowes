@@ -33,7 +33,8 @@ export interface PushData {
     | 'removed_from_group'
     | 'group_deleted'
     | 'expense_comment'
-    | 'expense_reaction';
+    | 'expense_reaction'
+    | 'expense_edited';
   expenseId?: string;
   settlementId?: string;
   groupId?: string;

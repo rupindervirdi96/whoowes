@@ -1,12 +1,13 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useTheme } from '../../theme';
 import { RootScreenProps } from '../../types/navigation';
-import { ExpenseCategory, SplitType, User } from '../../types';
+import { Expense, ExpenseCategory, SplitType, User } from '../../types';
 import { useCurrentUser } from '../../hooks/useAuth';
 import { useFriends } from '../../hooks/useFriends';
 import { useGroups } from '../../hooks/useGroups';
-import { useCreateExpense, useExpenses } from '../../hooks/useExpenses';
+import { useCreateExpense, useExpense, useExpenses, useUpdateExpense } from '../../hooks/useExpenses';
+import { useShowModal } from '../../store/uiStore';
 import { useMyCurrency } from '../../hooks/useCurrency';
 import { useT, type TKey } from '../../i18n';
 import { calculateSplit, splitByShares } from '../../utils/splitEngine';
@@ -30,6 +31,8 @@ import { categoryColor } from '../../components/ui/CategoryIcon';
 import GroupTile from '../../components/GroupTile';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import DatePickerSheet from '../../components/DatePickerSheet';
+import { SkeletonList } from '../../components/ui/Skeleton';
+import EmptyState from '../../components/ui/EmptyState';
 
 /** "shares" is worked out here and saved as exact amounts. */
 type SplitMode = Exclude<SplitType, 'item_based'> | 'shares';
@@ -70,9 +73,48 @@ function draftDay(value?: string): Date {
   return isNaN(d.getTime()) || d > today ? today : startOfDay(d);
 }
 
-const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route, navigation }) => {
+/** The form's starting values for an expense being edited. */
+function seedFrom(e: Expense) {
+  const mode: SplitMode = e.splitType === 'equal' ? 'equal' : e.splitType === 'percentage' ? 'percentage' : 'custom';
+  return {
+    currency: e.currency,
+    amount: amountToInput(e.amount, e.currency),
+    title: e.title,
+    category: e.category,
+    groupId: e.groupId ?? undefined,
+    paidBy: e.paidBy,
+    participantIds: e.splits.map((s) => s.userId),
+    splitMode: mode,
+    custom: mode === 'custom' ? Object.fromEntries(e.splits.map((s) => [s.userId, amountToInput(s.amount, e.currency)])) : {},
+    percent: mode === 'percentage' ? Object.fromEntries(e.splits.map((s) => [s.userId, String(s.percentage ?? '')])) : {},
+    day: draftDay(e.date),
+    notes: e.description ?? '',
+  };
+}
+
+/** Add an expense, or (with editId) change one: the same form, filled in. */
+const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = (props) => {
+  const editId = props.route.params?.editId;
+  const { data: editing, isLoading } = useExpense(editId ?? '');
+  const { t: tr } = useT();
+  if (editId && !editing) {
+    return (
+      <Screen>
+        {isLoading ? (
+          <SkeletonList rows={4} />
+        ) : (
+          <EmptyState emoji="🫥" title={tr('expenseDetail.notFound')} body={tr('expenseDetail.maybeDeleted')} actionLabel={tr('common.goBack')} onAction={() => props.navigation.goBack()} />
+        )}
+      </Screen>
+    );
+  }
+  return <ExpenseForm {...props} editing={editing} />;
+};
+
+const ExpenseForm: React.FC<RootScreenProps<'ManualExpense'> & { editing?: Expense }> = ({ route, navigation, editing }) => {
   const params = route.params ?? {};
   const draft = params.draft;
+  const seed = useMemo(() => (editing ? seedFrom(editing) : null), [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const t = useTheme();
   const { t: tr } = useT();
   const me = useCurrentUser()!;
@@ -81,32 +123,38 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
   const { data: groups = [] } = useGroups();
   const { data: pastExpenses = [] } = useExpenses();
   const create = useCreateExpense();
+  const update = useUpdateExpense();
+  const showModal = useShowModal();
+
+  useLayoutEffect(() => {
+    if (editing) navigation.setOptions({ title: tr('expense.editTitle') });
+  }, [editing, navigation, tr]);
 
   const initialGroup = groups.find((g) => g.id === (draft?.groupId ?? params.groupId));
   const [currency, setCurrency] = useState<string>(
-    isKnownCurrency(draft?.currency) ? draft!.currency : (initialGroup?.currency ?? myCurrency),
+    seed?.currency ?? (isKnownCurrency(draft?.currency) ? draft!.currency : (initialGroup?.currency ?? myCurrency)),
   );
   // Once the user picks a currency themselves, choosing a group no longer changes it.
-  const [currencyTouched, setCurrencyTouched] = useState(!!draft?.currency);
-  const [amount, setAmount] = useState(draft?.amount ? String(draft.amount) : '');
-  const [title, setTitle] = useState(draft?.title ?? '');
-  const [category, setCategory] = useState<ExpenseCategory>(draft?.category ?? 'food');
+  const [currencyTouched, setCurrencyTouched] = useState(!!draft?.currency || !!seed);
+  const [amount, setAmount] = useState(seed?.amount ?? (draft?.amount ? String(draft.amount) : ''));
+  const [title, setTitle] = useState(seed?.title ?? draft?.title ?? '');
+  const [category, setCategory] = useState<ExpenseCategory>(seed?.category ?? draft?.category ?? 'food');
   // Picking a category by hand stops the title from changing it.
-  const [categoryTouched, setCategoryTouched] = useState(!!draft?.category);
+  const [categoryTouched, setCategoryTouched] = useState(!!draft?.category || !!seed);
   const [titleFocused, setTitleFocused] = useState(false);
-  const [groupId, setGroupId] = useState<string | undefined>(draft?.groupId ?? params.groupId);
-  const [paidBy, setPaidBy] = useState(draft?.paidBy ?? me.id);
+  const [groupId, setGroupId] = useState<string | undefined>(seed ? seed.groupId : (draft?.groupId ?? params.groupId));
+  const [paidBy, setPaidBy] = useState(seed?.paidBy ?? draft?.paidBy ?? me.id);
   const [participantIds, setParticipantIds] = useState<Set<string>>(
-    new Set(draft?.participantIds ?? [me.id, ...(params.friendId ? [params.friendId] : [])]),
+    new Set(seed?.participantIds ?? draft?.participantIds ?? [me.id, ...(params.friendId ? [params.friendId] : [])]),
   );
-  const [splitMode, setSplitMode] = useState<SplitMode>(draft?.splitType ?? 'equal');
+  const [splitMode, setSplitMode] = useState<SplitMode>(seed?.splitMode ?? draft?.splitType ?? 'equal');
   const [custom, setCustom] = useState<Record<string, string>>(
-    Object.fromEntries(Object.entries(draft?.customAmounts ?? {}).map(([k, v]) => [k, String(v)])),
+    seed?.custom ?? Object.fromEntries(Object.entries(draft?.customAmounts ?? {}).map(([k, v]) => [k, String(v)])),
   );
-  const [percent, setPercent] = useState<Record<string, string>>({});
+  const [percent, setPercent] = useState<Record<string, string>>(seed?.percent ?? {});
   const [shares, setShares] = useState<Record<string, number>>({});
-  const [day, setDay] = useState<Date>(() => draftDay(draft?.date));
-  const [notes, setNotes] = useState('');
+  const [day, setDay] = useState<Date>(() => seed?.day ?? draftDay(draft?.date));
+  const [notes, setNotes] = useState(seed?.notes ?? '');
   const [sheet, setSheet] = useState<'group' | 'payer' | 'date' | 'currency' | 'split' | 'category' | 'notes' | null>(null);
 
   const openCurrency = useCallback(() => setSheet('currency'), []);
@@ -114,16 +162,24 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
   const decimals = currencyDecimals(currency);
 
   // People who can take part: the group's members, or me + my friends.
+  // When editing, everyone already on it stays listed, even if they've left the group since.
   const people: User[] = useMemo(() => {
-    if (group) return group.members.map((m) => m.user);
-    return [me, ...friends.map((f) => f.friendUser)];
-  }, [group, me, friends]);
+    const list = group ? group.members.map((m) => m.user) : [me, ...friends.map((f) => f.friendUser)];
+    if (!editing) return list;
+    const extra = [editing.paidByUser, ...editing.splits.map((s) => s.user)].filter((u) => !list.some((p) => p.id === u.id));
+    return [...list, ...extra.filter((u, i, a) => a.findIndex((x) => x.id === u.id) === i)];
+  }, [group, me, friends, editing]);
 
   // Picking a group puts the whole group on the bill, in the group's currency.
+  const keepPeople = useRef(!!editing);
   useEffect(() => {
+    if (keepPeople.current) {
+      if (groupId === (editing?.groupId ?? undefined)) return;
+      keepPeople.current = false;
+    }
     if (group && !draft) setParticipantIds(new Set(group.members.map((m) => m.userId)));
     if (!currencyTouched) setCurrency(group?.currency ?? myCurrency);
-  }, [group, draft, currencyTouched, myCurrency]);
+  }, [group, groupId, editing, draft, currencyTouched, myCurrency]);
 
   // Guess the category from the title ("Uber to airport" → Transport) until the user picks one.
   useEffect(() => {
@@ -198,21 +254,44 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
 
   const save = () => {
     if (!canSave || !split) return;
-    create.mutate(
-      {
-        title: title.trim(),
-        description: notes.trim() || undefined,
-        amount: total,
-        currency,
-        category,
-        paidBy,
-        splitType: splitMode === 'shares' ? 'custom' : splitMode,
-        splits: split.splits.map((s) => ({ userId: s.userId, amount: s.amount, percentage: s.percentage })),
-        groupId,
-        date: dateToISO(day),
-      },
-      { onSuccess: () => navigation.goBack() },
+    const splits = split.splits.map((s) => ({ userId: s.userId, amount: s.amount, percentage: s.percentage }));
+    const payload = {
+      title: title.trim(),
+      description: notes.trim() || undefined,
+      amount: total,
+      currency,
+      category,
+      paidBy,
+      splitType: (splitMode === 'shares' ? 'custom' : splitMode) as SplitType,
+      splits,
+      groupId,
+      date: dateToISO(day),
+    };
+    if (!editing) {
+      create.mutate(payload, { onSuccess: () => navigation.goBack() });
+      return;
+    }
+
+    // Same day as before: keep the original time, so the date doesn't count as changed.
+    if (sameDay(day, draftDay(editing.date))) payload.date = editing.date;
+    // A receipt split stays a receipt split while nobody's share changed.
+    const shareOf = (list: Array<{ userId: string; amount: number }>, id: string) => list.find((x) => x.userId === id)?.amount;
+    if (editing.splitType === 'item_based' && editing.splits.length === splits.length && editing.splits.every((x) => shareOf(splits, x.userId) === x.amount)) {
+      payload.splitType = 'item_based';
+    }
+
+    const run = () => update.mutate({ expenseId: editing.id, payload }, { onSuccess: () => navigation.goBack() });
+    // Someone already paid their share back: changing it opens it again, so check first.
+    const reopened = editing.splits.filter(
+      (x) => x.paid && x.userId !== editing.paidBy && (paidBy !== editing.paidBy || shareOf(splits, x.userId) !== x.amount),
     );
+    if (reopened.length === 0) return run();
+    showModal({
+      title: tr('expense.edit.paidTitle'),
+      body: tr('expense.edit.paidBody', { names: reopened.map((x) => (x.userId === me.id ? tr('common.you') : firstName(x.user.name))).join(', ') }),
+      confirmLabel: tr('expense.saveChanges'),
+      onConfirm: run,
+    });
   };
 
   const remaining =
@@ -300,7 +379,14 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
               {outcome.text}
             </Text>
           ) : null}
-          <Button title={tr('expense.save')} size="lg" fullWidth disabled={!canSave} loading={create.isPending} onPress={save} />
+          <Button
+            title={editing ? tr('expense.saveChanges') : tr('expense.save')}
+            size="lg"
+            fullWidth
+            disabled={!canSave}
+            loading={create.isPending || update.isPending}
+            onPress={save}
+          />
         </View>
       }
     >
@@ -313,7 +399,7 @@ const ManualExpenseScreen: React.FC<RootScreenProps<'ManualExpense'>> = ({ route
         </Card>
       ) : null}
 
-      <AmountInput value={amount} onChangeText={setAmount} currency={currency} onCurrencyPress={openCurrency} autoFocus={!draft} />
+      <AmountInput value={amount} onChangeText={setAmount} currency={currency} onCurrencyPress={openCurrency} autoFocus={!draft && !editing} />
 
       {/* What it was for, with its category on the left (guessed from the title until picked). */}
       <View style={{ flexDirection: 'row', gap: 10 }}>

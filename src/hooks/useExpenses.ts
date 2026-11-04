@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { ExpenseService, ReceiptService } from '../services';
 import { QUERY_KEYS } from '../constants';
-import { CreateExpensePayload, ExpenseActivity, ExpenseReactionEmoji } from '../types';
+import { CreateExpensePayload, ExpenseActivity, ExpenseReactionEmoji, UpdateExpensePayload } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { useShowToast } from '../store/uiStore';
 import { invalidateMoney, MutationError } from './queryUtils';
@@ -39,6 +39,23 @@ export function useCreateExpense() {
       showToast(translate('toast.expenseAdded', { title: e.title }), 'success');
     },
     onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotAddExpense'), 'error'),
+  });
+}
+
+export function useUpdateExpense() {
+  const queryClient = useQueryClient();
+  const userId = useAuthStore((s) => s.user?.id ?? '');
+  const showToast = useShowToast();
+  return useMutation({
+    mutationFn: ({ expenseId, payload }: { expenseId: string; payload: UpdateExpensePayload }) =>
+      ExpenseService.updateExpense(userId, expenseId, payload),
+    onSuccess: (e) => {
+      queryClient.setQueryData(QUERY_KEYS.EXPENSE(e.id), e);
+      // Balances, lists and the expense's history (the edit note) all change.
+      invalidateMoney(queryClient);
+      showToast(translate('toast.expenseUpdated'), 'success');
+    },
+    onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotUpdate'), 'error'),
   });
 }
 

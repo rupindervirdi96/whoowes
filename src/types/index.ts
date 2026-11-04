@@ -227,6 +227,19 @@ export interface ExpenseReaction {
   updatedAt: string;
 }
 
+/** One thing an edit changed, as shown in the expense's history. */
+export type ExpenseChange =
+  | { field: 'title'; from: string; to: string }
+  | { field: 'amount'; from: number; to: number; currency: string }
+  | { field: 'currency'; from: string; to: string }
+  | { field: 'category'; from: ExpenseCategory; to: ExpenseCategory }
+  | { field: 'date'; from: string; to: string }
+  | { field: 'paidBy'; from: User; to: User }
+  | { field: 'split' }
+  | { field: 'note' }
+  /** Group names; null means no group (or one that was deleted). */
+  | { field: 'group'; from: string | null; to: string | null };
+
 export interface ExpenseComment {
   id: string;
   userId: string;
@@ -235,6 +248,8 @@ export interface ExpenseComment {
   createdAt: string;
   /** Still on its way to the server (shown faded). */
   sending?: boolean;
+  /** Set when this is a note that `user` edited the expense, rather than a comment. */
+  edit?: ExpenseChange[];
 }
 
 /** Reactions and comments under an expense, oldest comment first. */
@@ -242,6 +257,9 @@ export interface ExpenseActivity {
   reactions: ExpenseReaction[];
   comments: ExpenseComment[];
 }
+
+/** An edit replaces the whole expense; its receipt and receipt lines stay. */
+export type UpdateExpensePayload = Omit<CreateExpensePayload, 'receiptId' | 'items'>;
 
 export interface CreateExpensePayload {
   groupId?: string;

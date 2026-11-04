@@ -54,6 +54,8 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
   const scrollRef = useRef<ScrollViewInstance>(null);
   const activity = activityQ.data;
   const comments = activity?.comments ?? [];
+  // Edit notes sit among the comments but don't count as comments.
+  const commentCount = comments.filter((c) => !c.edit).length;
 
   // Opened from a comment notification: go down to the conversation once it has loaded.
   const scrolledFor = useRef<string | null>(null);
@@ -73,23 +75,33 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
 
   useLayoutEffect(() => {
     navigation.setOptions({
+      // The person who added it or paid can change or delete it.
       headerRight: () =>
         canDelete ? (
-          <IconButton
-            icon="delete-outline"
-            variant="ghost"
-            size={40}
-            accessibilityLabel={tr('expenseDetail.delete')}
-            onPress={() =>
-              showModal({
-                title: tr('expenseDetail.deleteTitle'),
-                body: tr('expenseDetail.deleteBody'),
-                confirmLabel: tr('common.delete'),
-                variant: 'danger',
-                onConfirm: () => del.mutate(expenseId, { onSuccess: () => navigation.goBack() }),
-              })
-            }
-          />
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <IconButton
+              icon="edit"
+              variant="ghost"
+              size={40}
+              accessibilityLabel={tr('expenseDetail.edit')}
+              onPress={() => navigation.navigate('ManualExpense', { editId: expenseId })}
+            />
+            <IconButton
+              icon="delete-outline"
+              variant="ghost"
+              size={40}
+              accessibilityLabel={tr('expenseDetail.delete')}
+              onPress={() =>
+                showModal({
+                  title: tr('expenseDetail.deleteTitle'),
+                  body: tr('expenseDetail.deleteBody'),
+                  confirmLabel: tr('common.delete'),
+                  variant: 'danger',
+                  onConfirm: () => del.mutate(expenseId, { onSuccess: () => navigation.goBack() }),
+                })
+              }
+            />
+          </View>
         ) : null,
     });
   }, [navigation, canDelete, expenseId, del, showModal, tr]);
@@ -221,7 +233,7 @@ const ExpenseDetailScreen: React.FC<RootScreenProps<'ExpenseDetail'>> = ({ route
         {expense.description ? <ListRow title={tr('expenseDetail.notes')} subtitle={expense.description} /> : null}
       </Card>
 
-      <SectionHeader title={comments.length ? tr('comments.titleCount', { count: comments.length }) : tr('comments.title')} />
+      <SectionHeader title={commentCount ? tr('comments.titleCount', { count: commentCount }) : tr('comments.title')} />
       <Card padding={4} style={{ paddingHorizontal: 12 }}>
         <CommentList
           comments={comments}

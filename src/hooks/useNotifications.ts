@@ -44,6 +44,7 @@ function openFor(data: Partial<PushData> | undefined) {
   if (!data?.type || !navigationRef.isReady()) return false;
   switch (data.type) {
     case 'expense_added':
+    case 'expense_edited':
       if (data.expenseId) navigationRef.navigate('ExpenseDetail', { expenseId: data.expenseId });
       break;
     case 'expense_comment':

@@ -2,7 +2,7 @@
  * Mock Expenses Service.
  */
 
-import { Expense, CreateExpensePayload, ExpenseSplit, ExpenseActivity, ExpenseReactionEmoji } from '../../types';
+import { Expense, CreateExpensePayload, ExpenseSplit, ExpenseActivity, ExpenseChange, ExpenseReactionEmoji, UpdateExpensePayload } from '../../types';
 import { generateId } from '../../utils/idGenerator';
 import { nowISO } from '../../utils/date';
 import { mockDelay } from './mockHelpers';
@@ -81,6 +81,47 @@ const ExpenseService = {
       updatedAt: nowISO(),
     };
     return db.expenses[idx];
+  },
+
+  async updateExpense(userId: string, expenseId: string, payload: UpdateExpensePayload): Promise<Expense> {
+    await mockDelay(500);
+    const idx = db.expenses.findIndex((e) => e.id === expenseId);
+    if (idx === -1) return notFound();
+    const before = db.expenses[idx];
+    const old = new Map(before.splits.map((s) => [s.userId, s]));
+    const after: Expense = {
+      ...before,
+      groupId: payload.groupId ?? null,
+      title: payload.title,
+      description: payload.description,
+      amount: payload.amount,
+      currency: payload.currency ?? before.currency,
+      category: payload.category,
+      paidBy: payload.paidBy,
+      paidByUser: findUser(payload.paidBy),
+      splitType: payload.splitType,
+      splits: payload.splits.map((s) => ({
+        ...s,
+        user: findUser(s.userId),
+        // A share that stays the same keeps "paid back"; a changed one is open again.
+        paid: s.userId === payload.paidBy || (!!old.get(s.userId)?.paid && old.get(s.userId)!.amount === s.amount && before.paidBy === payload.paidBy),
+      })),
+      date: payload.date ?? before.date,
+      updatedAt: nowISO(),
+    };
+    const changes: ExpenseChange[] = [];
+    if (before.title !== after.title) changes.push({ field: 'title', from: before.title, to: after.title });
+    if (before.amount !== after.amount) changes.push({ field: 'amount', from: before.amount, to: after.amount, currency: after.currency });
+    if (before.category !== after.category) changes.push({ field: 'category', from: before.category, to: after.category });
+    if (before.date !== after.date) changes.push({ field: 'date', from: before.date, to: after.date });
+    if (before.paidBy !== after.paidBy) changes.push({ field: 'paidBy', from: before.paidByUser, to: after.paidByUser });
+    const key = (e: Expense) => e.splits.map((s) => `${s.userId}:${s.amount}`).sort().join(',');
+    if (key(before) !== key(after)) changes.push({ field: 'split' });
+    if ((before.description ?? '') !== (after.description ?? '')) changes.push({ field: 'note' });
+    if (changes.length === 0) return before;
+    db.expenses[idx] = after;
+    activityOf(expenseId).comments.push({ id: generateId(), userId, user: findUser(userId), text: '', createdAt: nowISO(), edit: changes });
+    return after;
   },
 
   async getActivity(expenseId: string): Promise<ExpenseActivity> {
