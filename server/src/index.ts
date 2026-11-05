@@ -8,6 +8,7 @@ import { phoneRouter } from './routes/phone.js';
 import { peopleRouter } from './routes/people.js';
 import { moneyRouter } from './routes/money.js';
 import { expenseChatRouter } from './routes/expenseChat.js';
+import { importRouter } from './routes/imports.js';
 import { legalRouter } from './routes/legal.js';
 import { admobCallback } from './aiPass.js';
 import { langOf, translate } from './i18n.js';
@@ -68,6 +69,7 @@ app.use('/auth/phone', phoneRouter);
 app.use(peopleRouter);
 app.use(moneyRouter);
 app.use(expenseChatRouter);
+app.use(importRouter);
 
 app.use((_req, res) => res.status(404).json({ message: 'Not found' }));
 

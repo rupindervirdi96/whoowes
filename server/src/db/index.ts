@@ -34,6 +34,15 @@ export interface UserDoc {
   avatarUrl: string | null;
   /** Preferred currency (ISO 4217). Set from the phone's region on sign-up; changeable. */
   currency?: string | null;
+  /**
+   * Someone brought over from Splitwise who isn't on WhoOwes yet. They can't sign
+   * in; their history moves to a real account once that person accepts (see claim).
+   */
+  placeholder?: { ownerId: string; source: 'splitwise' } | null;
+  /** A pending request for a WhoOwes user to take over this placeholder's history. */
+  claim?: { userId: string; by: string; at: Date } | null;
+  /** The account that took over this placeholder's history. */
+  mergedInto?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -105,6 +114,8 @@ export interface ExpenseDoc {
   items: ExpenseItem[] | null;
   receiptId: string | null;
   date: Date;
+  /** Set on expenses brought over from Splitwise, so importing the same file twice adds nothing. */
+  importKey?: string;
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
@@ -120,6 +131,8 @@ export interface SettlementDoc {
   status: 'pending' | 'confirmed' | 'rejected';
   groupId: string | null;
   expenseIds: string[] | null;
+  /** Set on payments brought over from Splitwise. */
+  importKey?: string;
   initiatedAt: Date;
   confirmedAt: Date | null;
   rejectedAt: Date | null;
@@ -278,11 +291,16 @@ async function startLocalMongo(dir: string): Promise<string> {
 
 async function createIndexes(c: Collections) {
   await Promise.all([
-    c.users.createIndexes([{ key: { phone: 1 }, unique: true }, { key: { phoneHash: 1 } }, { key: { emailLower: 1 } }]),
+    c.users.createIndexes([
+      { key: { phone: 1 }, unique: true },
+      { key: { phoneHash: 1 } },
+      { key: { emailLower: 1 } },
+      { key: { 'claim.userId': 1 }, sparse: true },
+    ]),
     c.friendships.createIndexes([{ key: { pair: 1 }, unique: true }, { key: { requesterId: 1 } }, { key: { addresseeId: 1 } }]),
     c.groups.createIndexes([{ key: { 'members.userId': 1 } }]),
-    c.expenses.createIndexes([{ key: { participants: 1, date: -1 } }, { key: { groupId: 1, date: -1 } }]),
-    c.settlements.createIndexes([{ key: { fromUserId: 1 } }, { key: { toUserId: 1, status: 1 } }, { key: { groupId: 1 } }]),
+    c.expenses.createIndexes([{ key: { participants: 1, date: -1 } }, { key: { groupId: 1, date: -1 } }, { key: { importKey: 1 }, sparse: true }]),
+    c.settlements.createIndexes([{ key: { fromUserId: 1 } }, { key: { toUserId: 1, status: 1 } }, { key: { groupId: 1 } }, { key: { importKey: 1 }, sparse: true }]),
     c.reminders.createIndexes([{ key: { toUserId: 1, createdAt: -1 } }, { key: { fromUserId: 1, toUserId: 1, createdAt: -1 } }]),
     c.receipts.createIndexes([{ key: { userId: 1 } }]),
     c.pushTokens.createIndexes([{ key: { userId: 1 } }]),

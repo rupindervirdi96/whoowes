@@ -51,10 +51,20 @@ export function publicUser(u: UserDoc, viewerId: string) {
     avatarUrl: u.avatarUrl ?? undefined,
     /** Preferred currency (only sent to its owner). */
     currency: self ? (u.currency ?? undefined) : undefined,
+    /** Brought over from Splitwise, not on WhoOwes yet. */
+    ...(u.placeholder && !u.mergedInto ? { placeholder: true as const } : {}),
     createdAt: iso(u.createdAt)!,
     updatedAt: iso(u.updatedAt)!,
   };
 }
+
+/** A person brought over from Splitwise who hasn't joined (or been taken over) yet. */
+export async function getPlaceholder(id: string) {
+  const u = await db.users.findOne({ _id: id, placeholder: { $type: 'object' }, mergedInto: null });
+  return u;
+}
+
+export const isPlaceholder = async (id: string) => !!(await getPlaceholder(id));
 export type PublicUser = ReturnType<typeof publicUser>;
 
 export async function usersById(ids: Iterable<string>, viewerId: string) {

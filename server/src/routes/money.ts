@@ -19,7 +19,9 @@
  *   GET    /settlements?groupId=            mine; with groupId, every payment in that group
  *   GET    /settlements/pending             waiting for me to confirm
  *   GET    /settlements/:id
- *   POST   /settlements                     { toUserId, amount, currency?, note?, groupId? }
+ *   POST   /settlements                     { toUserId, amount, currency?, note?, groupId?, fromUserId? }
+ *                                            With someone not on WhoOwes yet it counts at once; fromUserId
+ *                                            records that they paid me.
  *
  * Amounts are kept per currency and never converted: an expense or payment
  * without a currency uses the group's currency, then the user's, then USD.
@@ -35,7 +37,21 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireUser } from '../auth.js';
 import { db, type ExpenseChange, type ExpenseDoc, type ReceiptDoc, type SettlementDoc } from '../db/index.js';
-import { areFriends, canSettleWith, canTransactWith, fail, getVisibleExpense, isGroupMember, iso, mainBalance, myGroupIds, pairNet, route, toCents } from '../domain/common.js';
+import {
+  areFriends,
+  canSettleWith,
+  canTransactWith,
+  fail,
+  getVisibleExpense,
+  isGroupMember,
+  isPlaceholder,
+  iso,
+  mainBalance,
+  myGroupIds,
+  pairNet,
+  route,
+  toCents,
+} from '../domain/common.js';
 import { loadGroups, serializeExpenses, serializeSettlements } from '../domain/serialize.js';
 import { FALLBACK_CURRENCY, currencyCode } from '../currency.js';
 import { nameOf, notify, type PushItem } from '../push.js';
@@ -581,12 +597,24 @@ moneyRouter.post(
         note: z.string().trim().max(200).optional(),
         groupId: z.string().optional(),
         expenseIds: z.array(z.string()).max(200).optional(),
+        fromUserId: z.string().optional(),
       })
       .parse(req.body);
-    if (body.toUserId === me) fail(400, "You can't pay yourself.");
-    if (body.groupId && (await isGroupMember(body.groupId, me)) && (await isGroupMember(body.groupId, body.toUserId))) {
+    // Someone not on WhoOwes yet can't confirm a payment, or record their own: it counts at once.
+    let from = me;
+    let withPlaceholder: boolean;
+    if (body.fromUserId && body.fromUserId !== me) {
+      if (body.toUserId !== me || !(await isPlaceholder(body.fromUserId))) fail(403, 'Only the person paying can record a payment.');
+      from = body.fromUserId;
+      withPlaceholder = true;
+    } else {
+      if (body.toUserId === me) fail(400, "You can't pay yourself.");
+      withPlaceholder = await isPlaceholder(body.toUserId);
+    }
+    const other = from === me ? body.toUserId : from;
+    if (body.groupId && (await isGroupMember(body.groupId, me)) && (await isGroupMember(body.groupId, other))) {
       // A payment inside a group we're both still in.
-    } else if (!(await canSettleWith(me, body.toUserId))) {
+    } else if (!(await canSettleWith(me, other))) {
       fail(403, 'You can only pay friends, people in your groups, or people you still owe.');
     } else if (body.groupId) {
       // One of us has left the group: it becomes a direct payment.
@@ -595,22 +623,22 @@ moneyRouter.post(
     const now = new Date();
     const doc: SettlementDoc = {
       _id: randomUUID(),
-      fromUserId: me,
+      fromUserId: from,
       toUserId: body.toUserId,
       amountCents: toCents(body.amount),
       currency: body.currency ?? (await defaultCurrency(me, body.groupId)),
       note: body.note || null,
-      status: 'pending',
+      status: withPlaceholder ? 'confirmed' : 'pending',
       groupId: body.groupId ?? null,
       expenseIds: body.expenseIds ?? null,
       initiatedAt: now,
-      confirmedAt: null,
+      confirmedAt: withPlaceholder ? now : null,
       rejectedAt: null,
       createdAt: now,
       updatedAt: now,
     };
     await db.settlements.insertOne(doc);
-    notify([
+    if (!withPlaceholder) notify([
       {
         userId: doc.toUserId,
         kind: 'payment_recorded',

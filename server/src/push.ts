@@ -34,7 +34,10 @@ export type PushKind =
   | 'group_deleted'
   | 'expense_comment'
   | 'expense_reaction'
-  | 'expense_edited';
+  | 'expense_edited'
+  | 'splitwise_imported'
+  | 'history_claim'
+  | 'history_claimed';
 
 /** Matches PushData in the app (src/services/notifications.ts): tells a tap which screen to open. */
 interface PushData {
@@ -52,7 +55,10 @@ interface PushData {
     | 'group_deleted'
     | 'expense_comment'
     | 'expense_reaction'
-    | 'expense_edited';
+    | 'expense_edited'
+    | 'splitwise_imported'
+    | 'history_claim'
+    | 'history_claimed';
   expenseId?: string;
   settlementId?: string;
   groupId?: string;
@@ -80,6 +86,8 @@ interface Params {
   wasCents?: number;
   /** An edit: which parts changed (ExpenseChange fields). */
   fields?: string[];
+  /** How many expenses (a Splitwise history). */
+  count?: number;
 }
 
 export interface PushItem {
@@ -256,6 +264,36 @@ const TEXT: Record<PushKind, Record<Lang, Writer>> = {
               : `बदला गया: ${p.changed}।`,
     }),
   },
+  splitwise_imported: {
+    en: (p) => ({
+      title: p.group ? `${p.name} moved “${p.group}” from Splitwise` : `${p.name} moved your shared expenses from Splitwise`,
+      body: p.dir === 'owesYou' ? `Overall you get back ${p.amount}.` : p.dir === 'youOwe' ? `Overall you owe ${p.amount}.` : 'You’re all settled up.',
+    }),
+    fr: (p) => ({
+      title: p.group ? `${p.name} a transféré « ${p.group} » depuis Splitwise` : `${p.name} a transféré vos dépenses communes depuis Splitwise`,
+      body: p.dir === 'owesYou' ? `Au total, on vous doit ${p.amount}.` : p.dir === 'youOwe' ? `Au total, vous devez ${p.amount}.` : 'Tout est réglé.',
+    }),
+    es: (p) => ({
+      title: p.group ? `${p.name} trajo “${p.group}” desde Splitwise` : `${p.name} trajo sus gastos compartidos desde Splitwise`,
+      body: p.dir === 'owesYou' ? `En total te deben ${p.amount}.` : p.dir === 'youOwe' ? `En total debes ${p.amount}.` : 'Están a mano.',
+    }),
+    hi: (p) => ({
+      title: p.group ? `${p.name} “${p.group}” को Splitwise से ले आए` : `${p.name} आपके साझा ख़र्चे Splitwise से ले आए`,
+      body: p.dir === 'owesYou' ? `कुल मिलाकर आपको ${p.amount} वापस मिलेंगे।` : p.dir === 'youOwe' ? `कुल मिलाकर आपको ${p.amount} देने हैं।` : 'सारा हिसाब बराबर है।',
+    }),
+  },
+  history_claim: {
+    en: (p) => ({ title: `${p.name} found your Splitwise history`, body: `Add the ${p.count ?? 0} expenses for “${p.title}” to your account? Tap to review.` }),
+    fr: (p) => ({ title: `${p.name} a trouvé votre historique Splitwise`, body: `Ajouter les ${p.count ?? 0} dépenses de « ${p.title} » à votre compte ? Touchez pour voir.` }),
+    es: (p) => ({ title: `${p.name} encontró tu historial de Splitwise`, body: `¿Añadir los ${p.count ?? 0} gastos de “${p.title}” a tu cuenta? Toca para revisarlo.` }),
+    hi: (p) => ({ title: `${p.name} को आपका Splitwise इतिहास मिला`, body: `“${p.title}” के ${p.count ?? 0} ख़र्चे अपने खाते में जोड़ें? देखने के लिए टैप करें।` }),
+  },
+  history_claimed: {
+    en: (p) => ({ title: `${p.name} took over “${p.title}”`, body: 'Their Splitwise history is now on their own account.' }),
+    fr: (p) => ({ title: `${p.name} a repris « ${p.title} »`, body: 'Son historique Splitwise est maintenant sur son propre compte.' }),
+    es: (p) => ({ title: `${p.name} se quedó con “${p.title}”`, body: 'Su historial de Splitwise ya está en su propia cuenta.' }),
+    hi: (p) => ({ title: `${p.name} ने “${p.title}” को अपना लिया`, body: 'उनका Splitwise इतिहास अब उनके अपने खाते में है।' }),
+  },
   expense_reaction: {
     en: (p) => ({ title: `${p.name} reacted ${p.emoji} to “${p.title}”`, body: p.group ? p.group : 'Tap to see the expense.' }),
     fr: (p) => ({ title: `${p.name} a réagi ${p.emoji} à « ${p.title} »`, body: p.group ? p.group : 'Touchez pour voir la dépense.' }),
@@ -265,6 +303,9 @@ const TEXT: Record<PushKind, Record<Lang, Writer>> = {
 };
 
 const CHANNEL: Record<PushKind, Channel> = {
+  splitwise_imported: 'money',
+  history_claim: 'money',
+  history_claimed: 'social',
   friend_request: 'social',
   friend_accepted: 'social',
   added_to_group: 'social',

@@ -29,6 +29,7 @@ import {
   canSettleWith,
   escapeRegex,
   fail,
+  isPlaceholder,
   iso,
   myGroupIds,
   pairKey,
@@ -141,6 +142,8 @@ peopleRouter.delete(
     // Their comments and reactions go too.
     await db.expenseComments.deleteMany({ userId: me });
     await db.expenseReactions.deleteMany({ userId: me });
+    // Requests to take over a Splitwise history, from or to them.
+    await db.users.updateMany({ $or: [{ 'claim.userId': me }, { 'claim.by': me }] }, { $set: { claim: null } });
     await db.users.updateOne(
       { _id: me },
       {
@@ -210,7 +213,8 @@ peopleRouter.get(
       const groups = await db.groups.find({ _id: { $in: await myGroupIds(me) } }, { projection: { members: 1 } }).toArray();
       const ids = [...new Set(groups.flatMap((g) => g.members.map((m) => m.userId)))].filter((id) => id !== me);
       rows = await db.users
-        .find({ _id: { $in: ids }, name: { $regex: escapeRegex(q), $options: 'i' } })
+        // People brought over from Splitwise aren't on WhoOwes, so they can't be added.
+        .find({ _id: { $in: ids }, placeholder: null, name: { $regex: escapeRegex(q), $options: 'i' } })
         .limit(20)
         .toArray();
     }
@@ -254,7 +258,9 @@ peopleRouter.post(
     }
     if (!targetId) fail(400, 'Who do you want to add?');
     if (targetId === me) fail(400, "That's you!");
-    if (!(await db.users.findOne({ _id: targetId }, { projection: { _id: 1 } }))) fail(404, 'That person is not on WhoOwes.', 'not_found');
+    const target = await db.users.findOne({ _id: targetId }, { projection: { placeholder: 1 } });
+    if (!target) fail(404, 'That person is not on WhoOwes.', 'not_found');
+    if (target.placeholder) fail(400, 'They aren’t on WhoOwes yet. Invite them, then ask them to take over their Splitwise history.', 'placeholder');
 
     const pair = pairKey(me, targetId);
     const existing = await db.friendships.findOne({ pair });
@@ -359,6 +365,7 @@ peopleRouter.post(
       .object({ amount: z.number().positive().optional(), currency: currencyCode.optional() })
       .parse(req.body ?? {});
     if (!(await canSettleWith(me, to))) fail(403, 'You can only remind friends, people in your groups, or people who owe you.');
+    if (await isPlaceholder(to)) fail(400, 'They aren’t on WhoOwes yet, so they can’t get reminders.', 'placeholder');
     const recent = await db.reminders.findOne({ fromUserId: me, toUserId: to, createdAt: { $gt: new Date(Date.now() - 12 * HOUR) } });
     if (recent) fail(429, 'You already sent a reminder today. Give them a little time.', 'rate_limited');
     await db.reminders.insertOne({

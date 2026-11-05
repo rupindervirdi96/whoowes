@@ -186,6 +186,36 @@ const MESSAGES: Record<string, Translations> = {
     es: 'Alguien acaba de cambiar este gasto. Ábrelo de nuevo para ver lo último.',
     hi: 'किसी ने अभी यह ख़र्चा बदला है। ताज़ा जानकारी के लिए इसे फिर से खोलें।',
   },
+  'Choose which Splitwise name is you.': {
+    fr: 'Choisissez quel nom Splitwise est le vôtre.',
+    es: 'Elige cuál de los nombres de Splitwise eres tú.',
+    hi: 'चुनें कि Splitwise में कौन-सा नाम आपका है।',
+  },
+  'Each person can only be matched once.': {
+    fr: 'Chaque personne ne peut être associée qu’une fois.',
+    es: 'Cada persona solo se puede asociar una vez.',
+    hi: 'हर व्यक्ति को सिर्फ़ एक बार चुना जा सकता है।',
+  },
+  'This file doesn’t look like a Splitwise export.': {
+    fr: 'Ce fichier ne ressemble pas à un export Splitwise.',
+    es: 'Este archivo no parece una exportación de Splitwise.',
+    hi: 'यह फ़ाइल Splitwise एक्सपोर्ट जैसी नहीं लगती।',
+  },
+  'They aren’t on WhoOwes yet. Invite them, then ask them to take over their Splitwise history.': {
+    fr: 'Cette personne n’est pas encore sur WhoOwes. Invitez-la, puis demandez-lui de reprendre son historique Splitwise.',
+    es: 'Aún no está en WhoOwes. Invítala y luego pídele que se quede con su historial de Splitwise.',
+    hi: 'वे अभी WhoOwes पर नहीं हैं। उन्हें बुलाएँ, फिर उनसे अपना Splitwise इतिहास अपनाने को कहें।',
+  },
+  'They aren’t on WhoOwes yet, so they can’t get reminders.': {
+    fr: 'Cette personne n’est pas encore sur WhoOwes, elle ne peut donc pas recevoir de rappels.',
+    es: 'Aún no está en WhoOwes, así que no puede recibir recordatorios.',
+    hi: 'वे अभी WhoOwes पर नहीं हैं, इसलिए उन्हें याद नहीं दिलाया जा सकता।',
+  },
+  'Only the person paying can record a payment.': {
+    fr: 'Seule la personne qui paie peut enregistrer un paiement.',
+    es: 'Solo quien paga puede registrar un pago.',
+    hi: 'सिर्फ़ भुगतान करने वाला ही भुगतान दर्ज कर सकता है।',
+  },
   'Comment not found.': { fr: 'Commentaire introuvable.', es: 'Comentario no encontrado.', hi: 'टिप्पणी नहीं मिली।' },
   'You’re commenting too fast. Try again in a minute.': {
     fr: 'Vous commentez trop vite. Réessayez dans une minute.',
