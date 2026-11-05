@@ -13,6 +13,8 @@ export interface User {
   avatarUrl?: string;
   /** Preferred currency (ISO 4217). Only present on my own profile. */
   currency?: string;
+  /** Brought over from Splitwise and not on WhoOwes yet: can't sign in, get reminders or confirm payments. */
+  placeholder?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -378,6 +380,45 @@ export interface CreateSettlementPayload {
   note?: string;
   groupId?: string;
   expenseIds?: string[];
+  /** Only for someone not on WhoOwes yet: records that they paid me. */
+  fromUserId?: string;
+}
+
+// ─── Moving from Splitwise ───────────────────────────────────────────────────
+
+/** Who a Splitwise name is on WhoOwes: me, someone already here, or someone new (not on WhoOwes yet). */
+export type SplitwiseMatch = 'me' | 'new' | { userId: string };
+
+export interface SplitwiseImportPayload {
+  target: { kind: 'newGroup'; name: string } | { kind: 'group'; groupId: string } | { kind: 'none' };
+  people: Array<{ name: string; as: SplitwiseMatch }>;
+  /** As Splitwise wrote them: each person's change in balance, in column order. */
+  rows: Array<{ date: string; description: string; category: string; cost: number; currency: string; nets: number[] }>;
+}
+
+export interface SplitwiseImportResult {
+  groupId: string | null;
+  expenses: number;
+  payments: number;
+  /** Rows that changed nobody's balance. */
+  skipped: number;
+  /** Rows that were already brought over. */
+  alreadyHere: number;
+  newPeople: number;
+  /** The new people (not on WhoOwes yet) it made, by Splitwise name. */
+  created?: Array<{ name: string; userId: string }>;
+}
+
+/** Someone asked me to take over a Splitwise history (a placeholder's). */
+export interface HistoryClaim {
+  id: string;
+  name: string;
+  by: User;
+  at: string;
+  expenseCount: number;
+  groups: string[];
+  /** The placeholder's standing, per currency: + they're owed, − they owe. */
+  balances: CurrencyAmount[];
 }
 
 export interface RespondSettlementPayload {

@@ -1,5 +1,5 @@
 ﻿import React, { useLayoutEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, ScrollView, Share, View } from 'react-native';
 import { useTheme } from '../../theme';
 import { RootScreenProps } from '../../types/navigation';
 import { useCurrentUser } from '../../hooks/useAuth';
@@ -29,6 +29,10 @@ import { SectionHeader } from '../../components/ui/ListRow';
 import { SkeletonList } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 import ExpenseRow from '../../components/ExpenseRow';
+import BottomSheet from '../../components/ui/BottomSheet';
+import ListRow from '../../components/ui/ListRow';
+import { useRequestClaim } from '../../hooks/useImport';
+import { INVITE_URL } from '../../config';
 import SettlementRow from '../../components/SettlementRow';
 
 const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, navigation }) => {
@@ -45,6 +49,8 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
   const showModal = useShowModal();
   const { shared, turn, stats } = useFriendTogether(friendId);
   const [editingNickname, setEditingNickname] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const requestClaim = useRequestClaim();
 
   const friend = friends?.find((f) => f.friendId === friendId);
   const friendUser =
@@ -56,6 +62,9 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
   const first = firstName(name);
   const payments = settlements.filter((s) => s.fromUserId === friendId || s.toUserId === friendId);
   const isFriend = !!friends?.some((f) => f.friendId === friendId);
+  // Brought over from Splitwise, not on WhoOwes yet: no reminders; I record their payments.
+  const isPlaceholder = !!friendUser?.placeholder;
+  const realFriends = (friends ?? []).filter((f) => !f.friendUser.placeholder);
   // Someone I only know through a group: offer to add them.
   const { data: requests } = useFriendRequests();
   const addFriend = useAddFriend();
@@ -123,7 +132,11 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
           <Text variant="h2" numberOfLines={1}>
             {name}
           </Text>
-          {friendUser?.email || friendUser?.phone ? (
+          {isPlaceholder ? (
+            <Text variant="caption" tone="tertiary" numberOfLines={1} style={{ marginTop: 2 }}>
+              {tr('placeholder.badge')}
+            </Text>
+          ) : friendUser?.email || friendUser?.phone ? (
             <Text variant="caption" tone="tertiary" numberOfLines={1} style={{ marginTop: 2 }}>
               {friendUser.email || formatPhone(friendUser.phone!)}
             </Text>
@@ -159,7 +172,7 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
         </View>
       </View>
 
-      {!isFriend && friends && friendUser ? (
+      {!isFriend && !isPlaceholder && friends && friendUser ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: t.spacing.lg }}>
           <Text variant="caption" tone="tertiary" style={{ flex: 1 }}>
             {tr('friend.notFriendHint')}
@@ -222,7 +235,7 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
           </View>
         )}
         <View style={{ flexDirection: 'row', gap: 10, marginTop: t.spacing.lg }}>
-          {owedToMe.length ? (
+          {owedToMe.length && !isPlaceholder ? (
             <Button
               title={cooling ? tr('friend.reminded') : tr('friend.remind')}
               icon={cooling ? 'check' : 'notifications-active'}
@@ -248,12 +261,37 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
             }
           />
         </View>
-        {owedToMe.length && friend?.lastRemindedAt ? (
+        {owedToMe.length && !isPlaceholder && friend?.lastRemindedAt ? (
           <Text variant="caption" tone="tertiary" style={{ marginTop: 10, textAlign: 'center' }}>
             {tr('friend.lastReminded', { when: timeAgo(friend.lastRemindedAt) })}
           </Text>
         ) : null}
       </Card>
+
+      {isPlaceholder ? (
+        <Card variant="alt" style={{ marginTop: t.spacing.base }}>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Icon name="person-outline" size={20} color={t.colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text variant="bodyStrong">{tr('placeholder.title', { name: first })}</Text>
+              <Text tone="secondary" style={{ marginTop: 4 }}>
+                {tr('placeholder.body', { name: first })}
+              </Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+            <Button
+              title={tr('placeholder.invite')}
+              icon="share"
+              variant="secondary"
+              size="sm"
+              style={{ flex: 1 }}
+              onPress={() => Share.share({ message: tr('invite.message', { url: INVITE_URL }) })}
+            />
+            <Button title={tr('placeholder.link')} icon="link" size="sm" style={{ flex: 1 }} onPress={() => setLinking(true)} />
+          </View>
+        </Card>
+      ) : null}
 
       {stats ? (
         <>
@@ -289,6 +327,29 @@ const FriendDetailScreen: React.FC<RootScreenProps<'FriendDetail'>> = ({ route, 
       {isFriend ? (
         <Button title={tr('friend.remove')} variant="ghost" icon="person-remove" onPress={confirmRemove} style={{ marginTop: t.spacing.xl }} />
       ) : null}
+
+      <BottomSheet visible={linking} onClose={() => setLinking(false)} title={tr('placeholder.linkTitle', { name: first })} subtitle={tr('placeholder.linkHint', { name: first })}>
+        {realFriends.length === 0 ? (
+          <Text tone="secondary" style={{ paddingVertical: t.spacing.base }}>
+            {tr('placeholder.linkNoFriends', { name: first })}
+          </Text>
+        ) : (
+          <ScrollView style={{ flexGrow: 0, maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+            {realFriends.map((f, i) => (
+              <ListRow
+                key={f.friendId}
+                leading={<Avatar name={f.friendUser.name} uri={f.friendUser.avatarUrl} />}
+                title={f.friendUser.name}
+                divider={i < realFriends.length - 1}
+                trailing={requestClaim.isPending && requestClaim.variables?.userId === f.friendId ? <Text tone="tertiary">…</Text> : null}
+                onPress={() =>
+                  requestClaim.mutate({ placeholderId: friendId, userId: f.friendId, name: f.friendUser.name }, { onSuccess: () => setLinking(false) })
+                }
+              />
+            ))}
+          </ScrollView>
+        )}
+      </BottomSheet>
 
       <NicknameSheet friend={editingNickname ? (friend ?? null) : null} onClose={() => setEditingNickname(false)} onSave={actions.setNickname} />
     </Screen>

@@ -107,7 +107,14 @@ const AccountScreen: React.FC<RootScreenProps<'Account'>> = ({ navigation }) => 
       <SectionHeader title={tr('account.money')} />
       <Card padding={4} style={{ paddingHorizontal: 12 }}>
         <ListRow leading={<Icon name="insights" color={t.colors.primary} />} title={tr('account.insights')} chevron divider onPress={() => navigation.navigate('Insights')} />
-        <ListRow leading={<Icon name="account-balance-wallet" color={t.colors.primary} />} title={tr('friend.payments')} chevron onPress={() => navigation.navigate('Settlements')} />
+        <ListRow leading={<Icon name="account-balance-wallet" color={t.colors.primary} />} title={tr('friend.payments')} chevron divider onPress={() => navigation.navigate('Settlements')} />
+        <ListRow
+          leading={<Icon name="move-down" color={t.colors.primary} />}
+          title={tr('import.entry')}
+          subtitle={tr('import.entryHint')}
+          chevron
+          onPress={() => navigation.navigate('ImportSplitwise')}
+        />
       </Card>
 
       <SectionHeader title={tr('account.about')} />

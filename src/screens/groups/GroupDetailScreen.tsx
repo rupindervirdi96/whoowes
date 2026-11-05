@@ -229,6 +229,14 @@ const GroupDetailScreen: React.FC<RootScreenProps<'GroupDetail'>> = ({ route, na
                           size="sm"
                           onPress={() => navigation.navigate('SettleUp', { userId: d.to, amount: d.amount, currency: d.currency, groupId })}
                         />
+                      ) : d.to === me.id && d.fromUser.placeholder ? (
+                        // Not on WhoOwes yet: I record their payment myself.
+                        <Button
+                          title={tr('friend.recordPayment')}
+                          size="sm"
+                          variant="secondary"
+                          onPress={() => navigation.navigate('SettleUp', { userId: d.from, amount: d.amount, currency: d.currency, groupId })}
+                        />
                       ) : d.to === me.id ? (
                         <Button
                           title={tr('friend.remind')}
@@ -285,7 +293,7 @@ const GroupDetailScreen: React.FC<RootScreenProps<'GroupDetail'>> = ({ route, na
                   divider={i < group.members.length - 1}
                   leading={<Avatar name={m.user.name} />}
                   title={isMe ? tr('group.memberYou', { name: m.user.name }) : m.user.name}
-                  subtitle={isMe ? m.user.email || (m.user.phone ? formatPhone(m.user.phone) : undefined) : friendIds.has(m.userId) ? undefined : tr('friend.notFriendHint')}
+                  subtitle={isMe ? m.user.email || (m.user.phone ? formatPhone(m.user.phone) : undefined) : m.user.placeholder ? tr('placeholder.badge') : friendIds.has(m.userId) ? undefined : tr('friend.notFriendHint')}
                   onPress={isMe ? undefined : () => navigation.navigate('FriendDetail', { friendId: m.userId })}
                   trailing={
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>

@@ -1,10 +1,12 @@
 import { usePendingSettlements } from './useSettlements';
 import { useFriendRequests, useReminders } from './useFriends';
 import { useContactMatches } from './useContacts';
+import { useHistoryClaims } from './useImport';
 
 /**
  * What's waiting on me, for the bell on the home screen: payments to confirm,
- * reminders, friend requests, and contacts who joined WhoOwes.
+ * reminders, friend requests, Splitwise histories to take over, and contacts
+ * who joined WhoOwes.
  *
  * `count` is what the bell's badge shows. It counts things someone did, not
  * the standing "find friends from your contacts" suggestion, so the badge
@@ -15,14 +17,15 @@ export function useInbox() {
   const { data: requests } = useFriendRequests();
   const { data: reminders = [] } = useReminders();
   const contacts = useContactMatches();
+  const { data: claims = [] } = useHistoryClaims();
 
   const incoming = requests?.incoming ?? [];
   const newOnWhoOwes = contacts.data?.onWhoOwes.filter((m) => m.state === 'none') ?? [];
   const askForContacts = contacts.data?.permission === 'undetermined';
   const contactsRow = newOnWhoOwes.length > 0 || askForContacts;
 
-  const count = pending.length + reminders.length + incoming.length + (newOnWhoOwes.length > 0 ? 1 : 0);
-  const rows = pending.length + reminders.length + incoming.length + (contactsRow ? 1 : 0);
+  const count = claims.length + pending.length + reminders.length + incoming.length + (newOnWhoOwes.length > 0 ? 1 : 0);
+  const rows = claims.length + pending.length + reminders.length + incoming.length + (contactsRow ? 1 : 0);
 
-  return { pending, reminders, incoming, newOnWhoOwes, contactsRow, count, rows };
+  return { claims, pending, reminders, incoming, newOnWhoOwes, contactsRow, count, rows };
 }

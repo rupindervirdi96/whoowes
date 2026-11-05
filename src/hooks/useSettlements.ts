@@ -54,7 +54,8 @@ export function useCreateSettlement() {
     mutationFn: (payload: CreateSettlementPayload) => SettlementService.createSettlement(userId, payload),
     onSuccess: (s) => {
       invalidateMoney(queryClient);
-      showToast(translate('toast.paymentRecorded', { name: s.toUser.name.split(' ')[0] }), 'success');
+      // With someone not on WhoOwes yet it counts at once; otherwise the other person confirms.
+      showToast(s.status === 'confirmed' ? translate('toast.paymentSettled') : translate('toast.paymentRecorded', { name: s.toUser.name.split(' ')[0] }), 'success');
     },
     onError: (e: MutationError) => showToast(e.message ?? translate('toast.couldNotRecordPayment'), 'error'),
   });

@@ -19,9 +19,12 @@ import Text from '../ui/Text';
 /** Pin and private nickname, after a friend's name. */
 export const FriendNameTags: React.FC<{ friend: Friend }> = ({ friend }) => {
   const t = useTheme();
-  if (!friend.pinned && !friend.nickname) return null;
+  // Brought over from Splitwise, not on WhoOwes yet.
+  const placeholder = !!friend.friendUser.placeholder;
+  if (!friend.pinned && !friend.nickname && !placeholder) return null;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0, maxWidth: '55%' }}>
+      {placeholder ? <Icon name="person-outline" size={14} color={t.colors.textTertiary} /> : null}
       {friend.nickname ? (
         <View style={{ backgroundColor: t.colors.surfaceAlt, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, flexShrink: 1 }}>
           <Text variant="caption" tone="secondary" numberOfLines={1}>
@@ -134,7 +137,8 @@ export const OtherPersonRow: React.FC<{ row: PersonRowData; divider: boolean; re
       trailing={
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <BalanceAmounts amounts={row.amounts} />
-          <IconButton
+          {row.user.placeholder ? null : (
+            <IconButton
             icon={sent ? 'check' : 'person-add-alt'}
             variant="soft"
             shape="square"
@@ -142,7 +146,8 @@ export const OtherPersonRow: React.FC<{ row: PersonRowData; divider: boolean; re
             accessibilityLabel={sent ? tr('friend.requestSent') : tr('friends.addOther', { name: row.user.name })}
             onPress={sent || add.isPending ? undefined : () => add.mutate({ userId: row.user.id })}
             style={sent ? { backgroundColor: t.colors.surfaceAlt } : undefined}
-          />
+            />
+          )}
         </View>
       }
     />

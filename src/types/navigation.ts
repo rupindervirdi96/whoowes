@@ -51,6 +51,7 @@ export type RootStackParamList = {
 
   // Account
   Account: undefined;
+  ImportSplitwise: undefined;
   Insights: undefined;
 };
 

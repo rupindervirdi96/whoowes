@@ -40,6 +40,9 @@ const SettlementService = {
 
   async createSettlement(fromUserId: string, payload: CreateSettlementPayload): Promise<Settlement> {
     await mockDelay(600);
+    // Someone not on WhoOwes yet can't confirm, or record their own payment: it counts at once.
+    if (payload.fromUserId) fromUserId = payload.fromUserId;
+    const withPlaceholder = !!findUser(fromUserId).placeholder || !!findUser(payload.toUserId).placeholder;
     if (fromUserId === payload.toUserId) {
       return Promise.reject({ message: "You can't pay yourself", statusCode: 400 });
     }
@@ -53,7 +56,8 @@ const SettlementService = {
       amount: payload.amount,
       currency: payload.currency ?? 'USD',
       note: payload.note,
-      status: 'pending',
+      status: withPlaceholder ? 'confirmed' : 'pending',
+      ...(withPlaceholder ? { confirmedAt: now } : {}),
       groupId: payload.groupId,
       expenseIds: payload.expenseIds,
       initiatedAt: now,

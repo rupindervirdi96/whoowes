@@ -38,6 +38,8 @@ export const QUERY_KEYS = {
   CONTACT_MATCHES: ['contacts', 'matches'] as const,
   REMINDERS: ['reminders'] as const,
   GROUP_SETTLEMENTS: (groupId: string) => ['settlements', 'group', groupId] as const,
+  /** Requests for me to take over a Splitwise history. */
+  HISTORY_CLAIMS: ['friends', 'claims'] as const,
 } as const;
 
 /** Every query key that depends on expenses or settlements — invalidate together after a write. */

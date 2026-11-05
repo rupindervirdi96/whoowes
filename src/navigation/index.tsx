@@ -30,6 +30,7 @@ import SettleUpScreen from '../screens/settlements/SettleUpScreen';
 import SettlementsScreen from '../screens/settlements/SettlementsScreen';
 import SettlementDetailScreen from '../screens/settlements/SettlementDetailScreen';
 import AccountScreen from '../screens/account/AccountScreen';
+import ImportSplitwiseScreen from '../screens/account/ImportSplitwiseScreen';
 import InsightsScreen from '../screens/insights/InsightsScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -88,6 +89,7 @@ const RootNavigator: React.FC = () => {
             <Stack.Screen name="Settlements" component={SettlementsScreen} options={{ title: tr('friend.payments') }} />
             <Stack.Screen name="SettlementDetail" component={SettlementDetailScreen} options={{ title: tr('nav.payment') }} />
             <Stack.Screen name="Account" component={AccountScreen} options={{ title: tr('nav.account') }} />
+            <Stack.Screen name="ImportSplitwise" component={ImportSplitwiseScreen} options={{ title: tr('nav.importSplitwise') }} />
             <Stack.Screen name="FindFriends" component={FindFriendsScreen} options={{ title: tr('nav.findFriends') }} />
             <Stack.Screen name="Insights" component={InsightsScreen} options={{ title: tr('nav.insights') }} />
             <Stack.Screen name="ReceiptReview" component={ReceiptReviewScreen} options={{ title: tr('nav.reviewReceipt') }} />

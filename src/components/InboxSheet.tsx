@@ -5,6 +5,9 @@ import { useTheme } from '../theme';
 import { useT } from '../i18n';
 import { useInbox } from '../hooks/useInbox';
 import { useAcceptFriendRequest, useDismissReminder } from '../hooks/useFriends';
+import { useAcceptClaim, useDeclineClaim } from '../hooks/useImport';
+import { useShowModal } from '../store/uiStore';
+import type { HistoryClaim } from '../types';
 import { useMyCurrency } from '../hooks/useCurrency';
 import { formatCurrency } from '../utils/currency';
 import { firstName } from '../utils/money';
@@ -27,9 +30,30 @@ const InboxSheet: React.FC<InboxSheetProps> = ({ visible, onClose }) => {
   const { t: tr } = useT();
   const navigation = useNavigation();
   const myCurrency = useMyCurrency();
-  const { pending, reminders, incoming, newOnWhoOwes, contactsRow, rows } = useInbox();
+  const { claims, pending, reminders, incoming, newOnWhoOwes, contactsRow, rows } = useInbox();
   const accept = useAcceptFriendRequest();
   const dismissReminder = useDismissReminder();
+  const acceptClaim = useAcceptClaim();
+  const declineClaim = useDeclineClaim();
+  const showModal = useShowModal();
+
+  /** "Goa trip · you owe $40.00" — what taking it over means for me. */
+  const claimLine = (c: HistoryClaim) => {
+    const main = [...c.balances].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
+    const money = main
+      ? main.amount > 0
+        ? tr('claim.owedToYou', { amount: formatCurrency(main.amount, main.currency) })
+        : tr('claim.youOwe', { amount: formatCurrency(-main.amount, main.currency) })
+      : tr('common.settledUp');
+    return [c.groups[0], money].filter(Boolean).join(' · ');
+  };
+  const confirmClaim = (c: HistoryClaim) =>
+    showModal({
+      title: tr('claim.confirmTitle', { name: c.name }),
+      body: tr('claim.confirmBody', { name: firstName(c.by.name), count: c.expenseCount, detail: claimLine(c) }),
+      confirmLabel: tr('claim.accept'),
+      onConfirm: () => acceptClaim.mutate(c.id),
+    });
 
   // Close first, then go, so the next screen doesn't open under the sheet.
   const go = (fn: () => void) => () => {
@@ -49,6 +73,21 @@ const InboxSheet: React.FC<InboxSheetProps> = ({ visible, onClose }) => {
         </View>
       ) : (
         <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false}>
+          {claims.map((c, i) => (
+            <ListRow
+              key={c.id}
+              leading={<Avatar name={c.by.name} uri={c.by.avatarUrl} />}
+              title={tr('claim.title', { name: firstName(c.by.name), placeholder: c.name })}
+              subtitle={claimLine(c)}
+              divider={i < rows - 1}
+              trailing={
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <IconButton icon="close" variant="ghost" size={36} accessibilityLabel={tr('claim.decline')} onPress={() => declineClaim.mutate(c.id)} />
+                  <Button title={tr('claim.review')} size="sm" loading={acceptClaim.isPending && acceptClaim.variables === c.id} onPress={go(() => confirmClaim(c))} />
+                </View>
+              }
+            />
+          ))}
           {pending.map((s, i) => (
             <ListRow
               key={s.id}
@@ -56,7 +95,7 @@ const InboxSheet: React.FC<InboxSheetProps> = ({ visible, onClose }) => {
               title={tr('home.paidYouAmount', { name: firstName(s.fromUser.name), amount: formatCurrency(s.amount, s.currency) })}
               subtitle={tr('home.confirmYouGotIt')}
               chevron
-              divider={i < rows - 1}
+              divider={claims.length + i < rows - 1}
               onPress={go(() => navigation.navigate('SettlementDetail', { settlementId: s.id }))}
             />
           ))}
@@ -66,7 +105,7 @@ const InboxSheet: React.FC<InboxSheetProps> = ({ visible, onClose }) => {
               leading={<Avatar name={r.fromUser.name} uri={r.fromUser.avatarUrl} />}
               title={tr('home.sentReminder', { name: firstName(r.fromUser.name) })}
               subtitle={r.amount ? tr('home.about', { amount: formatCurrency(r.amount, r.currency ?? myCurrency) }) : tr('home.settleWhenYouCan')}
-              divider={pending.length + i < rows - 1}
+              divider={claims.length + pending.length + i < rows - 1}
               trailing={
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <IconButton icon="close" variant="ghost" size={36} accessibilityLabel={tr('home.dismissReminder')} onPress={() => dismissReminder.mutate(r.id)} />
@@ -81,7 +120,7 @@ const InboxSheet: React.FC<InboxSheetProps> = ({ visible, onClose }) => {
               leading={<Avatar name={r.friendUser.name} />}
               title={firstName(r.friendUser.name)}
               subtitle={tr('friends.wantsToBeFriends')}
-              divider={pending.length + reminders.length + i < rows - 1}
+              divider={claims.length + pending.length + reminders.length + i < rows - 1}
               trailing={<Button title={tr('common.accept')} size="sm" onPress={() => accept.mutate(r.id)} loading={accept.isPending && accept.variables === r.id} />}
             />
           ))}

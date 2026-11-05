@@ -17,6 +17,7 @@ import type {
   Friend,
   FriendPrefsPayload,
   Group,
+  HistoryClaim,
   LoginPayload,
   ParsedReceipt,
   Receipt,
@@ -25,6 +26,8 @@ import type {
   Reminder,
   RespondSettlementPayload,
   Settlement,
+  SplitwiseImportPayload,
+  SplitwiseImportResult,
   UpdateGroupPayload,
   User,
 } from '../../types';
@@ -113,6 +116,14 @@ export const LiveSettlementService = {
   respondToSettlement: (_userId: string, payload: RespondSettlementPayload) =>
     post<Settlement>(`/settlements/${payload.settlementId}/respond`, { action: payload.action }),
   cancelSettlement: (_userId: string, settlementId: string) => del(`/settlements/${settlementId}`),
+};
+
+export const LiveImportService = {
+  importSplitwise: (_userId: string, payload: SplitwiseImportPayload) => post<SplitwiseImportResult>('/import/splitwise', payload),
+  getClaims: () => get<HistoryClaim[]>('/placeholders/claims'),
+  requestClaim: (placeholderId: string, userId: string) => post<void>(`/placeholders/${placeholderId}/claim`, { userId }),
+  acceptClaim: (placeholderId: string) => post<void>(`/placeholders/${placeholderId}/claim/accept`),
+  declineClaim: (placeholderId: string) => post<void>(`/placeholders/${placeholderId}/claim/decline`),
 };
 
 export const LiveReceiptService = {

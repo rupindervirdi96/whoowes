@@ -30,8 +30,8 @@ export function useFriendActions() {
 
     addExpense: (friendId: string) => navigation.navigate('ManualExpense', { friendId }),
 
-    /** They owe me something (in any currency). */
-    canRemind: (row: FriendRowData) => row.amounts.some((a) => a.amount > 0),
+    /** They owe me something (in any currency), and they're on WhoOwes to hear about it. */
+    canRemind: (row: FriendRowData) => !row.friend.friendUser.placeholder && row.amounts.some((a) => a.amount > 0),
     /** I owe them something (in any currency). */
     canSettle: (row: FriendRowData) => row.amounts.some((a) => a.amount < 0),
 

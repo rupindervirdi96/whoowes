@@ -27,6 +27,13 @@ function refreshFor(queryClient: QueryClient, data: Partial<PushData> | undefine
     }
   } else if (type === 'friend_request' || type === 'friend_accepted') {
     invalidateFriendData(queryClient);
+  } else if (type === 'history_claim') {
+    // Someone asked me to take over a Splitwise history: it shows in the bell.
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.HISTORY_CLAIMS });
+  } else if (type === 'splitwise_imported' || type === 'history_claimed') {
+    // New expenses, people and maybe a group.
+    invalidateMoney(queryClient);
+    invalidateFriendData(queryClient);
   } else if (type === 'reminder') {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.REMINDERS });
   } else if (type === 'added_to_group') {
@@ -66,6 +73,17 @@ function openFor(data: Partial<PushData> | undefined) {
     case 'added_to_group':
     case 'member_left':
       if (data.groupId) navigationRef.navigate('GroupDetail', { groupId: data.groupId });
+      break;
+    case 'splitwise_imported':
+      if (data.groupId) navigationRef.navigate('GroupDetail', { groupId: data.groupId });
+      else if (data.userId) navigationRef.navigate('FriendDetail', { friendId: data.userId });
+      break;
+    case 'history_claimed':
+      if (data.userId) navigationRef.navigate('FriendDetail', { friendId: data.userId });
+      break;
+    case 'history_claim':
+      // The request waits in the bell on the home screen.
+      navigationRef.navigate('Main', { screen: 'Home' });
       break;
     case 'removed_from_group':
     case 'group_deleted':

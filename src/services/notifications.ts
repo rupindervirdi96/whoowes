@@ -34,7 +34,10 @@ export interface PushData {
     | 'group_deleted'
     | 'expense_comment'
     | 'expense_reaction'
-    | 'expense_edited';
+    | 'expense_edited'
+    | 'splitwise_imported'
+    | 'history_claim'
+    | 'history_claimed';
   expenseId?: string;
   settlementId?: string;
   groupId?: string;

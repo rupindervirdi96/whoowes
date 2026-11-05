@@ -11,11 +11,13 @@ import MockExpenses from './mock/expenseService';
 import MockReceipts from './mock/receiptService';
 import MockSettlements from './mock/settlementService';
 import MockReminders from './mock/reminderService';
+import MockImports from './mock/importService';
 import {
   LiveAuthService,
   LiveExpenseService,
   LiveFriendService,
   LiveGroupService,
+  LiveImportService,
   LiveReceiptService,
   LiveReminderService,
   LiveSettlementService,
@@ -28,3 +30,4 @@ export const ExpenseService = USE_MOCK_API ? MockExpenses : LiveExpenseService;
 export const ReceiptService = USE_MOCK_API ? MockReceipts : LiveReceiptService;
 export const SettlementService = USE_MOCK_API ? MockSettlements : LiveSettlementService;
 export const ReminderService = USE_MOCK_API ? MockReminders : LiveReminderService;
+export const ImportService = USE_MOCK_API ? MockImports : LiveImportService;

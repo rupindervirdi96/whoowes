@@ -86,7 +86,10 @@ const SettleUpScreen: React.FC<RootScreenProps<'SettleUp'>> = ({ route, navigati
     setCurrency(c);
     const n = balanceFor(personId, c)?.netBalance ?? 0;
     if (n < 0) setAmount(amountToInput(-n, c));
-    else if (n > 0) setDirection('got');
+    else if (n > 0) {
+      setDirection('got');
+      setAmount(amountToInput(n, c));
+    }
   };
 
   // Step 1: choose who
@@ -156,22 +159,26 @@ const SettleUpScreen: React.FC<RootScreenProps<'SettleUp'>> = ({ route, navigati
   }
 
   const name = firstName(person.name);
+  // Not on WhoOwes yet: they can't log or confirm anything, so I record both directions and it counts at once.
+  const placeholder = !!person.placeholder;
+  const recording = direction === 'pay' || placeholder;
+  // What's still open in the direction being recorded.
+  const open = direction === 'pay' ? Math.max(0, -net) : Math.max(0, net);
 
   const submit = () => {
     if (value <= 0) return;
     const methodLabel = method ? tr(METHODS.find((m) => m.id === method)!.key) : undefined;
     const fullNote = [methodLabel, note.trim()].filter(Boolean).join(' · ') || undefined;
     // The payer logs the payment; the person who received it confirms it.
-    create.mutate(
-      { toUserId: person.id, amount: value, currency, note: fullNote, groupId: params.groupId },
-      { onSuccess: () => navigation.goBack() },
-    );
+    const payment =
+      direction === 'got' ? { toUserId: me.id, fromUserId: person.id } : { toUserId: person.id };
+    create.mutate({ ...payment, amount: value, currency, note: fullNote, groupId: params.groupId }, { onSuccess: () => navigation.goBack() });
   };
 
   return (
     <Screen
       footer={
-        direction === 'pay' ? (
+        recording ? (
           <Button
             title={value > 0 ? tr('settle.recordAmount', { amount: formatCurrency(value, currency) }) : tr('settle.recordPayment')}
             icon="check"
@@ -186,9 +193,10 @@ const SettleUpScreen: React.FC<RootScreenProps<'SettleUp'>> = ({ route, navigati
     >
       <View style={{ alignItems: 'center', marginTop: t.spacing.sm }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <Avatar name={me.name} size="lg" />
+          {/* Money goes from whoever paid. */}
+          <Avatar name={direction === 'got' ? person.name : me.name} size="lg" />
           <Icon name="arrow-forward" size={26} color={t.colors.textTertiary} />
-          <Avatar name={person.name} size="lg" />
+          <Avatar name={direction === 'got' ? me.name : person.name} size="lg" />
         </View>
         <Text variant="bodyLg" style={{ marginTop: 12 }}>
           {direction === 'pay' ? tr('settle.youPay', { name }) : tr('payment.paidYou', { name })}
@@ -221,7 +229,7 @@ const SettleUpScreen: React.FC<RootScreenProps<'SettleUp'>> = ({ route, navigati
         ]}
       />
 
-      {direction === 'got' ? (
+      {!recording ? (
         <Card variant="alt" style={{ marginTop: t.spacing.base }}>
           <Text variant="bodyStrong">{tr('settle.askToRecord', { name })}</Text>
           <Text tone="secondary" style={{ marginTop: 4 }}>
@@ -244,13 +252,13 @@ const SettleUpScreen: React.FC<RootScreenProps<'SettleUp'>> = ({ route, navigati
       ) : (
         <>
           <AmountInput value={amount} onChangeText={setAmount} currency={currency} onCurrencyPress={() => setPickerOpen(true)} autoFocus={!params.amount} />
-          {net < 0 && value !== Math.abs(net) ? (
+          {open > 0 && value !== open ? (
             <View style={{ alignItems: 'flex-start', marginTop: -4, marginBottom: 12 }}>
-              <Chip label={tr('settle.fullAmount', { amount: formatCurrency(-net, currency) })} onPress={() => setAmount(amountToInput(-net, currency))} />
+              <Chip label={tr('settle.fullAmount', { amount: formatCurrency(open, currency) })} onPress={() => setAmount(amountToInput(open, currency))} />
             </View>
           ) : null}
           <Text variant="label" tone="secondary" style={{ marginBottom: 8 }}>
-            {tr('settle.howDidYouPay')}
+            {direction === 'got' ? tr('settle.howDidTheyPay', { name }) : tr('settle.howDidYouPay')}
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: t.spacing.base }}>
             {METHODS.map((m) => (
@@ -261,7 +269,7 @@ const SettleUpScreen: React.FC<RootScreenProps<'SettleUp'>> = ({ route, navigati
           <Card variant="alt" padding={12} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
             <Icon name="verified-user" size={18} color={t.colors.primary} />
             <Text variant="caption" tone="secondary" style={{ flex: 1 }}>
-              {tr('settle.noMoneyMoves', { name })}
+              {placeholder ? tr('settle.placeholderNote', { name }) : tr('settle.noMoneyMoves', { name })}
             </Text>
           </Card>
         </>
